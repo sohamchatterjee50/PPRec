@@ -117,33 +117,33 @@ class EBNeRDSplit:
         behaviors_parquet_path = os.path.join(split_folder, "behaviors.parquet")
         history_parquet_path = os.path.join(split_folder, "history.parquet")
 
-        self.articles = pd.read_parquet(articles_parquet_path)
-        self.behaviors = pd.read_parquet(behaviors_parquet_path)
-        self.history = pd.read_parquet(history_parquet_path)
+        self._articles = pd.read_parquet(articles_parquet_path)
+        self._behaviors = pd.read_parquet(behaviors_parquet_path)
+        self._history = pd.read_parquet(history_parquet_path)
 
         # In the articlestotal_inviews, total_pageviews and total_read_time are supposed
         # to be integers looking at the data, but they are floats in the parquet file.
         # Note that I had to use the Int64 type, because it contains NaN values.
-        self.articles["total_inviews"] = self.articles["total_inviews"].astype("Int64")
-        self.articles["total_pageviews"] = self.articles["total_pageviews"].astype(
+        self._articles["total_inviews"] = self._articles["total_inviews"].astype("Int64")
+        self._articles["total_pageviews"] = self._articles["total_pageviews"].astype(
             "Int64"
         )
-        self.articles["total_read_time"] = self.articles["total_read_time"].astype(
+        self._articles["total_read_time"] = self._articles["total_read_time"].astype(
             "Int64"
         )
 
         # Same for the article id, postcode, gender age and next_read_time in the behaviors dataframe
-        self.behaviors["article_id"] = self.behaviors["article_id"].astype("Int64")
-        self.behaviors["postcode"] = self.behaviors["postcode"].astype("Int64")
-        self.behaviors["gender"] = self.behaviors["gender"].astype("Int64")
-        self.behaviors["age"] = self.behaviors["age"].astype("Int64")
-        self.behaviors["next_read_time"] = self.behaviors["next_read_time"].astype(
+        self._behaviors["article_id"] = self._behaviors["article_id"].astype("Int64")
+        self._behaviors["postcode"] = self._behaviors["postcode"].astype("Int64")
+        self._behaviors["gender"] = self._behaviors["gender"].astype("Int64")
+        self._behaviors["age"] = self._behaviors["age"].astype("Int64")
+        self._behaviors["next_read_time"] = self._behaviors["next_read_time"].astype(
             "Int64"
         )
 
-        self.articles.set_index("article_id", inplace=True, drop=False)
-        self.behaviors.set_index("impression_id", inplace=True, drop=False)
-        self.history.set_index("user_id", inplace=True, drop=False)
+        self._articles.set_index("article_id", inplace=True, drop=False)
+        self._behaviors.set_index("impression_id", inplace=True, drop=False)
+        self._history.set_index("user_id", inplace=True, drop=False)
 
     def summarize(self, show_head: bool = False, show_columns: bool = False):
         """
@@ -158,27 +158,27 @@ class EBNeRDSplit:
 
         """
 
-        print(f"Articles: {self.articles.shape}")
+        print(f"Articles: {self._articles.shape}")
         if show_columns:
-            print("Columns Articles: ", self.articles.columns)
+            print("Columns Articles: ", self._articles.columns)
         if show_head:
-            print(self.articles.head())
+            print(self._articles.head())
 
         print("\n")
 
-        print(f"Behaviors: {self.behaviors.shape}")
+        print(f"Behaviors: {self._behaviors.shape}")
         if show_columns:
-            print("Columns Behaviors: ", self.behaviors.columns)
+            print("Columns Behaviors: ", self._behaviors.columns)
         if show_head:
-            print(self.behaviors.head())
+            print(self._behaviors.head())
 
         print("\n")
 
-        print(f"History: {self.history.shape}")
+        print(f"History: {self._history.shape}")
         if show_columns:
-            print("Columns History: ", self.history.columns)
+            print("Columns History: ", self._history.columns)
         if show_head:
-            print(self.history.head())
+            print(self._history.head())
 
     def get_random_article_id(self) -> int:
         """
@@ -187,7 +187,7 @@ class EBNeRDSplit:
 
         """
 
-        return self.articles.sample().index[0]
+        return self._articles.sample().index[0]
 
     def get_random_impression_id(self) -> int:
         """
@@ -196,7 +196,7 @@ class EBNeRDSplit:
 
         """
 
-        return self.behaviors.sample().index[0]
+        return self._behaviors.sample().index[0]
 
     def get_random_user_id(self) -> int:
         """
@@ -205,7 +205,7 @@ class EBNeRDSplit:
 
         """
 
-        return self.history.sample().index[0]
+        return self._history.sample().index[0]
 
     def get_random_article(self) -> Article:
         """
@@ -244,7 +244,7 @@ class EBNeRDSplit:
 
         """
 
-        article = self.articles.loc[article_id].to_dict()
+        article = self._articles.loc[article_id].to_dict()
         return Article.model_validate(article)
 
     def get_behavior(self, impression_id: int) -> Behavior:
@@ -254,7 +254,7 @@ class EBNeRDSplit:
 
         """
 
-        behavior = self.behaviors.loc[impression_id].to_dict()
+        behavior = self._behaviors.loc[impression_id].to_dict()
         return Behavior.model_validate(behavior)
 
     def get_history(self, user_id: int) -> History:
@@ -264,7 +264,7 @@ class EBNeRDSplit:
 
         """
 
-        history = self.history.loc[user_id].to_dict()
+        history = self._history.loc[user_id].to_dict()
 
         # impression_time_fixed are np.datetime64 objects, which don't work with pydantic
         # so we convert them to datetime objects

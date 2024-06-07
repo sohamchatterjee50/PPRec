@@ -8,40 +8,22 @@ from .split import EBNeRDSplit, DatasetSize
 
 @dataclass
 class TrainArticle:
-    # something like this, dont know what we need exactly
-
-    title: str
-    body: str
-    text: str
+    # needed for the LookupNewEncoder
     article_id: int
-    crt: float
-    publish_time: int
-    impression_time: int
 
-    # we can find these in the artifacts
-    # for a given embedding model and article id
-    text_embeddings: list[float]
+    # going to be needed when we have an actual news encoder
+    # new_encoder_input: torch.Tensor
 
+    # the time since publication to prediction
+    recency: int
 
-@dataclass
-class TrainUserClick:
-    impression_id: int
-    article_id: int
-    article: TrainArticle
-
-
-@dataclass
-class TrainUserHistory:
-    # something like this
-
-    user_id: int
-    clicks: list[TrainUserClick]
-    user_encoder_input: torch.Tensor
+    # click-through rate
+    ctr: float
 
 
 @dataclass
 class TrainDataPoint:
-    user_behavior: TrainUserHistory
+    user_encoder_input: torch.Tensor
     good_article: TrainArticle
     bad_article: TrainArticle
 
@@ -52,14 +34,14 @@ class EBNeRDTrainDataset(Dataset):
         self.split = EBNeRDSplit(split="train", size=size, data_folder=data_folder)
 
     def __len__(self) -> int:
-        return len(self.split.behaviors)
+        return len(self.split._behaviors)
 
     def __get__(self, user_id: int) -> TrainDataPoint:
 
         # Looking at the loss function, every i in D whould be
         # a pair of a positive and a negative article, for a given
         # user. So i'd say this is the starting point:
-        user_history = self.split.history.loc[user_id]
+        user_history = self.split.get_history(user_id)
 
         # So we output some user data/history, and one good
         # and one bad article. And for these articles

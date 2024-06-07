@@ -89,9 +89,9 @@ def _test_news_encoder(
 
 def _test_ebnerd_split(split: EBNeRDSplit, n: int = 50) -> None:
 
-    assert len(split.articles) > 0
-    assert len(split.behaviors) > 0
-    assert len(split.history) > 0
+    assert len(split._articles) > 0
+    assert len(split._behaviors) > 0
+    assert len(split._history) > 0
 
     # these test the functionality of get_article, get_behavior, and get_history
     # using pydantic to validate the data
