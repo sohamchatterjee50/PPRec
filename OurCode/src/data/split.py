@@ -145,6 +145,9 @@ class EBNeRDSplit:
         self._behaviors.set_index("impression_id", inplace=True, drop=False)
         self._history.set_index("user_id", inplace=True, drop=False)
 
+        self.split = split
+        self.size = size
+
     def summarize(self, show_head: bool = False, show_columns: bool = False):
         """
 

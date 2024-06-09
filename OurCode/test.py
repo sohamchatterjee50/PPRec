@@ -2,8 +2,9 @@ from typing import get_args
 from argparse import ArgumentParser
 
 import numpy as np
+import torch
 
-from src.model.news_encoder import LookupNewsEncoder, TextEncodeModel
+from src.model.news_encoder import LookupNewsEncoder, TextEncodeModel, NewsEncoderConfig
 from src.data.split import EBNeRDSplit, DatasetSize, DatasetSplit
 
 
@@ -21,8 +22,11 @@ def main():
 
     print("Loading encoders")
 
-    news_encoders = [
-        LookupNewsEncoder(model=model) for model in get_args(TextEncodeModel)
+    news_encoder_config = NewsEncoderConfig()
+
+    lookup_news_encoders = [
+        LookupNewsEncoder(model=model, config=news_encoder_config)
+        for model in get_args(TextEncodeModel)
     ]
 
     print("Loading datasets")
@@ -35,18 +39,17 @@ def main():
     ]
 
     assert len(ebnerd_splits) > 0
-    assert len(news_encoders) > 0
+    assert len(lookup_news_encoders) > 0
 
     print("Testing dataset tools")
 
     for split in ebnerd_splits:
         _test_ebnerd_split(split)
 
-    print("Testing encoders")
+    print("Testing news encoders")
 
-    for news_encoder in news_encoders:
+    for news_encoder in lookup_news_encoders:
         _test_news_encoder(news_encoder, ebnerd_splits)
-
 
 
 def _test_news_encoder(
@@ -56,6 +59,8 @@ def _test_news_encoder(
     batch_size: int = 64,
 ) -> None:
 
+    print(f"Testing LookupNewsEncoder with model {news_encoder.model}")
+
     random_articles = []
 
     for split in ebnerd_splits:
@@ -64,6 +69,8 @@ def _test_news_encoder(
         ]
         random_articles.extend(random_articles_in_split)
 
+    print("Testing LookupNewsEncoder.get_embeddings")
+
     for article in random_articles:
         embeddings = news_encoder.get_embeddings(article.article_id)
 
@@ -71,6 +78,7 @@ def _test_news_encoder(
         assert len(embeddings.shape) == 1
         assert embeddings.shape[0] == 768 or embeddings.shape[0] == 300
 
+    print("Testing LookupNewsEncoder.get_embeddings_batch")
 
     article_ids = [article.article_id for article in random_articles]
 
@@ -86,8 +94,21 @@ def _test_news_encoder(
         assert embeddings_batch.shape[1] == 768 or embeddings_batch.shape[1] == 300
         assert embeddings_batch.shape[0] == len(article_ids_batch)
 
+    print("Testing LookupNewsEncoder.forward")
+
+    for article_ids_batch in article_ids_batched:
+        embeddings_batch = news_encoder.get_embeddings_batch(article_ids_batch)
+        n = news_encoder.forward(article_ids_batch)
+
+        assert isinstance(n, torch.Tensor)
+        assert len(n.shape) == 2
+        assert n.shape[1] == news_encoder.config.get_size_n()
+        assert n.shape[0] == len(article_ids_batch)
+
 
 def _test_ebnerd_split(split: EBNeRDSplit, n: int = 50) -> None:
+
+    print(f"Testing EBNeRDSplit with split {split.split} and size {split.size}")
 
     assert len(split._articles) > 0
     assert len(split._behaviors) > 0

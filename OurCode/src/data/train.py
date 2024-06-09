@@ -8,11 +8,11 @@ from .split import EBNeRDSplit, DatasetSize
 
 @dataclass
 class TrainArticle:
-    # needed for the LookupNewEncoder
+    # needed for the LookupNewsEncoder
     article_id: int
 
     # going to be needed when we have an actual news encoder
-    # new_encoder_input: torch.Tensor
+    # news_encoder_input: torch.Tensor
 
     # the time since publication to prediction
     recency: int
