@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 import numpy as np
 import torch
 
-from src.model.news_encoder import LookupNewsEncoder, TextEncodeModel, NewsEncoderConfig
+from src.model.news_encoder import LookupNewsEncoder, TextEncodeModel, NEConfig
 from src.data.split import EBNeRDSplit, DatasetSize, DatasetSplit
 
 
@@ -22,7 +22,7 @@ def main():
 
     print("Loading encoders")
 
-    news_encoder_config = NewsEncoderConfig()
+    news_encoder_config = NEConfig()
 
     lookup_news_encoders = [
         LookupNewsEncoder(model=model, config=news_encoder_config)

@@ -11,7 +11,7 @@ from ..utils import get_data_folder
 
 
 @dataclass
-class NewsEncoderConfig:
+class NEConfig:
     n_attention_heads: int = 20
     head_output_size: int = 20
 
@@ -50,7 +50,7 @@ class LookupNewsEncoder(nn.Module):
     def __init__(
         self,
         model: TextEncodeModel,
-        config: NewsEncoderConfig,
+        config: NEConfig,
         data_folder: str | None = None,
     ):
         super().__init__()
