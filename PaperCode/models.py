@@ -90,6 +90,7 @@ def AttentivePooling(dim1,dim2):
     model = Model(vecs_input,user_vec)
     return model
 
+# This one is only used in 
 def AttentivePoolingQKY(dim1,dim2,dim3):
     vecs_input = Input(shape=(dim1,dim2),dtype='float32')
     value_input = Input(shape=(dim1,dim3),dtype='float32')

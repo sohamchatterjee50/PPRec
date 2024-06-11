@@ -475,9 +475,11 @@ def get_news_encoder_co3(
 def create_pe_model(
     config, model_config, News, word_embedding_matrix, entity_embedding_matrix
 ):
+    # Pepijn: max_clicked in our code, in user_encoder.py. Added a max_clicked_news config parameter to our code.
     max_clicked_news = config["max_clicked_news"]
 
     if model_config["news_encoder"] == 0:
+        # Pepijn: Our news_encoder.py
         news_encoder = get_news_encoder(
             config,
             len(News.category_dict),
@@ -486,6 +488,9 @@ def create_pe_model(
             word_embedding_matrix,
             entity_embedding_matrix,
         )
+        # Pepijn: Our news_encoder.py. And this is the one used in the popularity encoder it seems.
+        # This means that the weights arent shared? Maybe only the embedding matrices, but I feel like
+        # these are just starting weights, they dont share the same memory on gpu.
         bias_news_encoder = get_news_encoder(
             config,
             len(News.category_dict),
@@ -496,6 +501,7 @@ def create_pe_model(
         )
 
     elif model_config["news_encoder"] == 1:
+        # Pepijn: Check above
         news_encoder = get_news_encoder_co1(
             config,
             len(News.category_dict),
@@ -504,6 +510,8 @@ def create_pe_model(
             word_embedding_matrix,
             entity_embedding_matrix,
         )
+
+        # Pepijn: Check above
         bias_news_encoder = get_news_encoder_co1(
             config,
             len(News.category_dict),
@@ -513,8 +521,11 @@ def create_pe_model(
             entity_embedding_matrix,
         )
 
+    # Pepijn: size_n in our code, the news embeddings size?
     news_input_length = int(news_encoder.input.shape[1])
     print(news_input_length)
+
+    # Pepijn: in our user_encoder.py: ctr input to PopularityEmbedding
     clicked_input = Input(
         shape=(
             max_clicked_news,
