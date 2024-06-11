@@ -309,7 +309,7 @@ def get_news_encoder_co1(
     return model
 
 
-# Pepijn: not used anywhere, just co1
+# Pepijn: not used anywhere, just co1 and the regular one
 def get_news_encoder_co2(
     config,
     vert_num,
@@ -386,7 +386,7 @@ def get_news_encoder_co2(
     return model
 
 
-# Pepijn: not used anywhere, just co1
+# Pepijn: not used anywhere, just co1 and the regular one
 def get_news_encoder_co3(
     config,
     vert_num,
@@ -478,6 +478,8 @@ def create_pe_model(
     # Pepijn: max_clicked in our code, in user_encoder.py. Added a max_clicked_news config parameter to our code.
     max_clicked_news = config["max_clicked_news"]
 
+    # Pepijn, news encoder 0 is the news encoder that uses all article attributes. 1 doesnt use the body.
+    # For the w/o news content bar in figure 10 in the paper.
     if model_config["news_encoder"] == 0:
         # Pepijn: Our news_encoder.py
         news_encoder = get_news_encoder(
@@ -500,8 +502,11 @@ def create_pe_model(
             entity_embedding_matrix,
         )
 
+    # Pepijn: Like I stated above, this option is to not use the body of the article, for
+    # the experiment in figure 10 in the paper.
     elif model_config["news_encoder"] == 1:
-        # Pepijn: Check above
+
+        # Pepijn: our news encoder, but which doesnt use the body of the articles
         news_encoder = get_news_encoder_co1(
             config,
             len(News.category_dict),
@@ -521,11 +526,21 @@ def create_pe_model(
             entity_embedding_matrix,
         )
 
-    # Pepijn: size_n in our code, the news embeddings size?
+    # Pepijn: the articles vector size. This is the concatenated size of the title
+    # length (in tokens or words I think), body length (in tokens as well) those
+    # verts (no idea what this is yet) and lastly entity length (in number of entities),
+    # in this order. In the co1 version there is no body though. Every token, entity
+    # or vert is an int, some 'vocabulary' index.
+    #
+    # When we implement the actual news encoder I think its clearer to keep these
+    # separate, and not concatenate them before input? We can concatenate them in the
+    # module right. So we can avoid this lookup table thing in `get_news_encoder` etc.
     news_input_length = int(news_encoder.input.shape[1])
     print(news_input_length)
 
-    # Pepijn: in our user_encoder.py: ctr input to PopularityEmbedding
+    # Pepijn: Now comes the implementation of the user encoder. So our user_encoder.py.
+
+    # Pepijn: the article vectors for all historically clicked inputs.
     clicked_input = Input(
         shape=(
             max_clicked_news,
@@ -533,35 +548,82 @@ def create_pe_model(
         ),
         dtype="int32",
     )
+
+    # Pepijn: in our user_encoder.py: ctr input to PopularityEmbedding?
+    # We can see here ctr is an int, so maybe how many times the article 
+    # was clicked? But a click-through should be a percentage, the number
+    # of clicks over the number of impressions. So therefore I feel
+    # like this is just the ctr as a precentage, but scaled to the range
+    # of 0-200. Since the popularity embedding layer they use has a vocab
+    # size of 200. Maybe the answer is in the input data loading.
     clicked_ctr = Input(shape=(max_clicked_news,), dtype="int32")
     print(clicked_input.shape)
 
-    # Pepijn: This TimeDisctributes stuff they use everywhere, its
+    # Pepijn: This TimeDistributed stuff they use everywhere, its
     # just a fancy way to have a second 'batch' dimension. For instance
     # our news encoder expects a batch of news articles, but the user
     # encoder needs to encode the news of all the clicked articles of a user,
     # for every user in the batch. So in pytorch there is no tool to do this,
     # we would just merge the batch and the clicked articles dimension, do
     # the encoding, and then split them again. Nothing special.
+
+    # Pepijn: the news embeddings for all clicked articles by a user. So in our
+    # code n, the input to the NewsSelfAttention module for the user encoder.
     user_vecs = TimeDistributed(news_encoder)(clicked_input)
 
+    # Pepijn: In our code PopularityEmbedding in the user encoder.
     popularity_embedding_layer = Embedding(200, 400, trainable=True)
+
+    # Pepijn: The output from the PopularityEmbedding module in the user encoder,
+    # creating the popularity embeddings p, based on the click through rate's ctr.
     popularity_embedding = popularity_embedding_layer(clicked_ctr)
 
+    # Pepijn: For the experiment in figure 9. They can turn of the popularity embeddings
+    # in the user encoder, to create the w/o news popularity bar in the plot. This first
+    # if is the regular option, so with the popularity embeddings.
     if model_config["popularity_user_modeling"]:
+
+        # Pepijn: For some reason these guys create it twice. At first I thought it was
+        # bacause the popularity embedding was also used for something else, maybe the
+        # popularity predictor (even though no stated in the paper though) but they dont.
+        # So we can safely assume its just a mistake. No difference I think haha.
+        # They probably just forgot they already it two lines above. Check those comments.
         popularity_embedding_layer = Embedding(200, 400, trainable=True)
+
+        # Pepijn: Relevant to the comment above. Check the comments a few lines above.
         popularity_embedding = popularity_embedding_layer(clicked_ctr)
+
+        # Pepijn: Our NewsSelfAttention module in the user encoder.
         MHSA = Attention(20, 20)
+
+        # Pepijn: Like the forward function in our NewsSelfAttention module. So the output
+        # are the m vectors, the called 'contextual news representation' in the paper. 
+        # Annoying they still call is user vecs haha. 
         user_vecs = MHSA([user_vecs, user_vecs, user_vecs])
+
+        # Pepijn: Mmmm why is this commented out. 
         # user_vec_query = keras.layers.Add()([user_vecs,popularity_embedding])
+
+        # Pepijn: This stuff under does the same as our Content-
+        # PopularityJoinAttention module. I think they found it 
+        # more logical to implement their CPJA stuff by formulating 
+        # it in terms of AttentivePooling. 
         user_vec_query = keras.layers.Concatenate(axis=-1)(
             [user_vecs, popularity_embedding]
         )
         user_vec = AttentivePoolingQKY(50, 800, 400)([user_vec_query, user_vecs])
+
+    # Pepijn: This is for w/o news popularity in figure 9.
     else:
+
+        # Pepijn: Same as above, but without the popularity embeddings.
         user_vecs = Attention(20, 20)([user_vecs, user_vecs, user_vecs])
         user_vecs = Dropout(0.2)(user_vecs)
         user_vec = AttentivePooling(max_clicked_news, 400)(user_vecs)
+
+    # Pepijn: This is were the user encoder stuff ends, and the popularity 
+    # predictor begins. So our popularity_predictor.py.
+
 
     candidates = keras.Input(
         (
