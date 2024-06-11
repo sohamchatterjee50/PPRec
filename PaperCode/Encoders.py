@@ -569,8 +569,9 @@ def create_pe_model(
     # we would just merge the batch and the clicked articles dimension, do
     # the encoding, and then split them again. Nothing special.
 
-    # Pepijn: the news embeddings for all clicked articles by a user. So in our
+    # Pepijn: user_vecs == news embeddings for all clicked articles by a user. So in our
     # code n, the input to the NewsSelfAttention module for the user encoder.
+    # So they use TimeDistributes to apply the news encoder to all clicked articles.
     user_vecs = TimeDistributed(news_encoder)(clicked_input)
 
     # Pepijn: In our code PopularityEmbedding in the user encoder.
@@ -626,10 +627,12 @@ def create_pe_model(
     # Pepijn: This is were the user encoder stuff ends, and the popularity
     # predictor begins. So our popularity_predictor.py.
 
-    # The articles input vector for the candidate articles. The `npratio` is the negative
+    # Pepijn: The articles input vector for the candidate articles. The `npratio` is the negative
     # to positive ratio. So to be able to have two or more of them during training, one
     # positive and some negatives. So one that the user eventually clicked, and some that
-    # the user didnt click. 
+    # the user didnt click. In the paper they don't formulate the loss function to have
+    # this possibility, just one negative and one positive, but its possible of course.
+    # But probably does not give better results.
     candidates = keras.Input(
         (
             1 + config["npratio"],
@@ -638,53 +641,111 @@ def create_pe_model(
         dtype="int32",
     )
 
-    # The click through rate of the candidate articles. This time the crt is a float, so
+    # Pepijn: The click through rate of the candidate articles. This time the crt is a float, so
     # probably the actual click through rate. So the number of clicks over the number of
     # impressions. So not scaled to a range, like for the user encoder! (If I'm correct
     # about the user encoder, could also be that they use the absolute number of clicks in
-    # that case). So this is the crt input to our TimeAwarePopularityPredictor in 
-    # popularity_predictor.py.
+    # that case). So this is the crt input to our TimeAwarePopularityPredictor in
+    # popularity_predictor.py. Again, note the npratio to facilitate one positive and some
+    # negative examples.
     candidates_ctr = keras.Input((1 + config["npratio"],), dtype="float32")
 
-    # The recencies of the candidate articles. So the time since the article was published, 
-    # in hours, rounded. So the recencies input to our TimeAwarePopularityPredictor in
-    # popularity_predictor.py.
+    # Pepijn: The recencies of the candidate articles. So the time since the article was published,
+    # in hours, rounded, I think. The `recencies`` input to our TimeAwarePopularityPredictor in
+    # popularity_predictor.py. Again, note the npratio to facilitate one positive and
+    # some negative examples.
     candidates_rece_emb_index = keras.Input((1 + config["npratio"],), dtype="int32")
 
+    # Pepijn: Config to create w/o news recency in figure 10 in the paper. First the
+    # regular 'with recency' case.
     if model_config["rece_emb"]:
+
+        # Pepijn: The combined vector containing both the recency embeddings r, and the news
+        # embeddings n (the inputs to our TimeAwarePopularityPredictor in popularity_predictor.py).
+        # 400 for the news embeddings, and 100 for the recency embeddings, making 500
         bias_content_vec = Input(shape=(500,))
+
+        # Pepijn: Here they split them up in what we call n and r in our code and in the Paper.
+        # Why werent they split up in the first case? Makes the code a lot more unreadable.
+
+        # Pepijn: Separating the news embeddings n, the first 400 elements of the combined vector.
         vec1 = keras.layers.Lambda(lambda x: x[:, :400])(bias_content_vec)
+
+        # Pepijn: The recency embeddings r, the last 100 elements of the combined vector.
+        # Q: In our code we still convert the recency to the embeddings. Here its already done...
+        # They dont have our RecencyEmbedding module (not in this part at least). Maybe will find 
+        # the answer later in code. 
         vec2 = keras.layers.Lambda(lambda x: x[:, 400:])(bias_content_vec)
 
+        # Pepijn: Here the news embeddings are passed through the Dense network.
+        # This is the right side Dense module in figure 4. In our code this Dense network
+        # is called ContentBasedPopularityDense. In the paper they say the Dense networks
+        # all have two layers, with 100 dimensional hidden units. But this one has 256/128
+        # dimensional hidden units, and wouldnt you call this a four layer network as well?
+        # Annoying. All we know is that the paper is lying.
         vec1 = Dense(256, activation="tanh")(vec1)
         vec1 = Dense(256, activation="tanh")(vec1)
         vec1 = Dense(
             128,
         )(vec1)
+
+        # Pepijn: The output of ContentBasedPopularityDense in our code. So $\hat{p}_c$ or pc
+        # This confirms the output should be a scalar.
         bias_content_score = Dense(1, use_bias=False)(vec1)
 
+        # Pepijn: Similarly, a small neural network functioning as teh left side
+        # Dense in figure 4. In our code this Dense network is called RecencyBasedPopularityDense.
+        # Just like the content Dense network, their lying in the paper about dimensions.
+        # Its a three (not two, or would you call this two? idk) layer network, with
+        # 64 dimensional hidden units, not 100.
         vec2 = Dense(64, activation="tanh")(vec2)
         vec2 = Dense(64, activation="tanh")(vec2)
+
+        # Pepijn: The output of RecencyBasedPopularityDense in our code. So $\hat{p}_r$ or pr
         bias_recency_score = Dense(1, use_bias=False)(vec2)
 
+        # Pepijn: All under here is the gate, but it surely is different from the one they explain
+        # in formula (1) in section 3.3 in the paper... This might explain why in this formula
+        # Wp is denoted as a matrix, but should be a vector, since otherwise theta wouldnt be a
+        # scalar. Here they use a three/two (idk anymore) layer network, instead of 'a single layer'.
+        # At least, this small network is called ContentRecencyGate in our code.
         gate = Dense(128, activation="tanh")(bias_content_vec)
         gate = Dense(64, activation="tanh")(gate)
+
+        # Pepijn: The output of this ContentRecencyGate network. So $\theta$ in the paper and our code.
         gate = Dense(1, activation="sigmoid")(gate)
 
+        # Pepijn: This piece of code is in the top level TimeAwarePopularityPredictor in our code.
+        # The output is the final popularity score $\hat{p}$, which is, as the paper states
+        # the weighted sum of the content and recency popularity scores $\hat{p}_c$ and $\hat{p}_r$.
         bias_content_score = keras.layers.Lambda(
             lambda x: (1 - x[0]) * x[1] + x[0] * x[2]
         )([gate, bias_content_score, bias_recency_score])
 
+        # Pepijn: Combining the inputs and outputs to create the model. So this is like the
+        # TimeAwarePopularityPredictor in our code.
         bias_content_scorer = Model(bias_content_vec, bias_content_score)
 
+    # Pepijn: This is the w/o news recency case in figure 10.
     else:
+
+        # Pepijn: So then the vec is just the news embeddings n with length 400.
         bias_content_vec = Input(shape=(400,))
+
+        # Pepijn: More info about this in the comments in the 'with recency' case above.
+        # In our code this network is called ContentBasedPopularityDense. And the paper is
+        # lying about dimensions!
         vec = Dense(256, activation="tanh")(bias_content_vec)
         vec = Dense(256, activation="tanh")(vec)
         vec = Dense(
             128,
         )(vec)
+
+        # Pepijn: The output of ContentBasedPopularityDense in our code. So $\hat{p}_c$ or pc
         bias_content_score = Dense(1, use_bias=False)(vec)
+
+        # Pepijn: Combining the inputs and outputs to create the model. So this is like the
+        # TimeAwarePopularityPredictor in our code, but without using the recencies.
         bias_content_scorer = Model(bias_content_vec, bias_content_score)
 
     time_embedding_layer = Embedding(1500, 100, trainable=True)
