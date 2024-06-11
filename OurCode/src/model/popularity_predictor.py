@@ -57,7 +57,9 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
             CRGConfig(r_size=config.r_size, n_size=config.n_size)
         )
 
-    def forward(self, n: torch.Tensor, recencies: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, n: torch.Tensor, recencies: torch.Tensor, crt: torch.Tensor
+    ) -> torch.Tensor:
         r"""
 
         Calculate the popularity score $s_p$ based on the news embeddings n and the
@@ -71,6 +73,10 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         hours since the news article was published, to the time of prediction) for each
         news article in the batch.
 
+        crt is a tensor of shape (batch_size) that contains the click through rates for
+        each news article in the batch. Its a float this time, not an integer like in the
+        user encoder. So a value between 0 and 1.
+
         sp is a tensor of shape (batch_size) that contains the popularity scores for
         each news article in the batch.
 
@@ -79,6 +85,8 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         batch_size, n_size = n.size()
         assert recencies.size(0) == batch_size
         assert n_size == self.config.n_size
+        assert crt.max() <= 1.0 and crt.min() >= 0.0
+        assert crt.dtype == torch.float32 or crt.dtype == torch.float64
 
         r = self.recency_embedding(recencies)  # (batch_size, r_size)
         assert len(r.size()) == 2
@@ -101,7 +109,7 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         assert len(p.size()) == 1
         assert p.size(0) == batch_size
 
-        sp = self.wc * recencies + self.wp * p  # (batch_size)
+        sp = self.wc * crt + self.wp * p  # (batch_size)
         assert len(sp.size()) == 1
         assert sp.size(0) == batch_size
 

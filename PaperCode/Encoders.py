@@ -530,7 +530,9 @@ def create_pe_model(
     # length (in tokens or words I think), body length (in tokens as well) those
     # verts (no idea what this is yet) and lastly entity length (in number of entities),
     # in this order. In the co1 version there is no body though. Every token, entity
-    # or vert is an int, some 'vocabulary' index.
+    # or vert is an int, some 'vocabulary' index. Note: I suspect its number of tokens,
+    # but this could well be something else. The config in Main.ipynb uses a body_length
+    # of 100, which seems quite small...
     #
     # When we implement the actual news encoder I think its clearer to keep these
     # separate, and not concatenate them before input? We can concatenate them in the
@@ -550,7 +552,7 @@ def create_pe_model(
     )
 
     # Pepijn: in our user_encoder.py: ctr input to PopularityEmbedding?
-    # We can see here ctr is an int, so maybe how many times the article 
+    # We can see here ctr is an int, so maybe how many times the article
     # was clicked? But a click-through should be a percentage, the number
     # of clicks over the number of impressions. So therefore I feel
     # like this is just the ctr as a precentage, but scaled to the range
@@ -597,17 +599,17 @@ def create_pe_model(
         MHSA = Attention(20, 20)
 
         # Pepijn: Like the forward function in our NewsSelfAttention module. So the output
-        # are the m vectors, the called 'contextual news representation' in the paper. 
-        # Annoying they still call is user vecs haha. 
+        # are the m vectors, the called 'contextual news representation' in the paper.
+        # Annoying they still call is user vecs haha.
         user_vecs = MHSA([user_vecs, user_vecs, user_vecs])
 
-        # Pepijn: Mmmm why is this commented out. 
+        # Pepijn: Mmmm why is this commented out.
         # user_vec_query = keras.layers.Add()([user_vecs,popularity_embedding])
 
         # Pepijn: This stuff under does the same as our Content-
-        # PopularityJoinAttention module. I think they found it 
-        # more logical to implement their CPJA stuff by formulating 
-        # it in terms of AttentivePooling. 
+        # PopularityJoinAttention module. I think they found it
+        # more logical to implement their CPJA stuff by formulating
+        # it in terms of AttentivePooling.
         user_vec_query = keras.layers.Concatenate(axis=-1)(
             [user_vecs, popularity_embedding]
         )
@@ -621,10 +623,13 @@ def create_pe_model(
         user_vecs = Dropout(0.2)(user_vecs)
         user_vec = AttentivePooling(max_clicked_news, 400)(user_vecs)
 
-    # Pepijn: This is were the user encoder stuff ends, and the popularity 
+    # Pepijn: This is were the user encoder stuff ends, and the popularity
     # predictor begins. So our popularity_predictor.py.
 
-
+    # The articles input vector for the candidate articles. The `npratio` is the negative
+    # to positive ratio. So to be able to have two or more of them during training, one
+    # positive and some negatives. So one that the user eventually clicked, and some that
+    # the user didnt click. 
     candidates = keras.Input(
         (
             1 + config["npratio"],
@@ -632,7 +637,18 @@ def create_pe_model(
         ),
         dtype="int32",
     )
+
+    # The click through rate of the candidate articles. This time the crt is a float, so
+    # probably the actual click through rate. So the number of clicks over the number of
+    # impressions. So not scaled to a range, like for the user encoder! (If I'm correct
+    # about the user encoder, could also be that they use the absolute number of clicks in
+    # that case). So this is the crt input to our TimeAwarePopularityPredictor in 
+    # popularity_predictor.py.
     candidates_ctr = keras.Input((1 + config["npratio"],), dtype="float32")
+
+    # The recencies of the candidate articles. So the time since the article was published, 
+    # in hours, rounded. So the recencies input to our TimeAwarePopularityPredictor in
+    # popularity_predictor.py.
     candidates_rece_emb_index = keras.Input((1 + config["npratio"],), dtype="int32")
 
     if model_config["rece_emb"]:
