@@ -72,6 +72,17 @@ def get_vert_encoder(
     return model
 
 
+# Our KnowledgeAwareNewsEncoder module in news_encoder.py. It created news embeddings $n$
+# based on the articles. But beware that this news encoder is used in three places in the
+# overall architecture. To create the news embeddings used in the user encoder, to create
+# the news embeddings used in the popularity predictor, and to create the news embeddings
+# that are dot-producted with the user embeddings to create the final personalized matching
+# scores. Its gets even more confusing, because the news encoder is used in the user encoder
+# does share weights with the news encoder user to create the news embeddings that will be
+# dot-producted with the user embeddings. But the news encoder used in the popularity predictor
+# does not share their weights. Look at the create_pe_model function to see this in action.
+# Over there they instantiate two news encoders, `news_encoder` (the one used twice) and
+# `bias_news_encoder` (the one used once, for the popularity predictor).
 def get_news_encoder(
     config,
     vert_num,
@@ -471,17 +482,25 @@ def get_news_encoder_co3(
     return model
 
 
-# Pepijn: This is not just the popularity encoder, or the popularity embedding module. This is the PPRec model.
+# Pepijn: This is not just the popularity encoder, or the popularity embedding module. This is the full PPRec model.
+# Confusing fucking name hahah.
 def create_pe_model(
     config, model_config, News, word_embedding_matrix, entity_embedding_matrix
 ):
     # Pepijn: max_clicked in our code, in user_encoder.py. Added a max_clicked_news config parameter to our code.
     max_clicked_news = config["max_clicked_news"]
 
-    # Pepijn, news encoder 0 is the news encoder that uses all article attributes. 1 doesnt use the body.
-    # For the w/o news content bar in figure 10 in the paper.
+    # Pepijn, news encoder 0 is the news encoder that uses all article attributes.
+    # co1 doesnt use the body (the else statement) does not, and if for the w/o news
+    # content bar in figure 10 in the paper.
     if model_config["news_encoder"] == 0:
-        # Pepijn: Our news_encoder.py
+
+        # Pepijn: A news encoder. But this one is used in two occasions. If you look at
+        # figure 2 (the whole architecture), this covers the right side of the figure.
+        # The Knowledge-aware News Encoder in the middle, and also in the Popularity-aware User
+        # Encoder. If we zoom in on the Popularity-aware User Encoder by looking at figure 5,
+        # We see it again as the News Encoder module. So what we have to rememeber is that
+        # this news encoder is used in two places, and the weights are shared.
         news_encoder = get_news_encoder(
             config,
             len(News.category_dict),
@@ -490,9 +509,12 @@ def create_pe_model(
             word_embedding_matrix,
             entity_embedding_matrix,
         )
-        # Pepijn: Our news_encoder.py. And this is the one used in the popularity encoder it seems.
-        # This means that the weights arent shared? Maybe only the embedding matrices, but I feel like
-        # these are just starting weights, they dont share the same memory on gpu.
+
+        # Pepijn: A second news encoder. This one is only used in the Time-aware Popularity Predictor,
+        # in the left side of figure 2. If we zoom in on this popularity predictor, by looking at
+        # figure 4, we see it again as the News Encoder module. A thing to note is that this `bias`
+        # prefix is the authors slang to denote that its about the popularity predictor. They use
+        # this prefix more often in this code.
         bias_news_encoder = get_news_encoder(
             config,
             len(News.category_dict),
@@ -503,10 +525,12 @@ def create_pe_model(
         )
 
     # Pepijn: Like I stated above, this option is to not use the body of the article, for
-    # the experiment in figure 10 in the paper.
+    # the experiment in figure 10 in the paper. For the w/o news content bar.
     elif model_config["news_encoder"] == 1:
 
-        # Pepijn: our news encoder, but which doesnt use the body of the articles
+        # Pepijn: Check above for more info on the difference between these
+        # two news encoders. To summarize, this one is used in the Popularity-aware User
+        # and the Knowledge-aware News Encoder.
         news_encoder = get_news_encoder_co1(
             config,
             len(News.category_dict),
@@ -516,7 +540,7 @@ def create_pe_model(
             entity_embedding_matrix,
         )
 
-        # Pepijn: Check above
+        # Pepijn: Check above for more info. This one is only used in the Time-aware Popularity Predictor.
         bias_news_encoder = get_news_encoder_co1(
             config,
             len(News.category_dict),
@@ -569,7 +593,7 @@ def create_pe_model(
     # we would just merge the batch and the clicked articles dimension, do
     # the encoding, and then split them again. Nothing special.
 
-    # Pepijn: user_vecs == news embeddings for all clicked articles by a user. So in our
+    # Pepijn: user_vecs are the news embeddings for all clicked articles by a user. So in our
     # code n, the input to the NewsSelfAttention module for the user encoder.
     # So they use TimeDistributes to apply the news encoder to all clicked articles.
     user_vecs = TimeDistributed(news_encoder)(clicked_input)
@@ -614,14 +638,23 @@ def create_pe_model(
         user_vec_query = keras.layers.Concatenate(axis=-1)(
             [user_vecs, popularity_embedding]
         )
+
+        # Pepijn: so this final user_vec is the output of the user encoder, the user embeddings
+        # u. So the output of the PopularityAwareUserEncoer module in user_encoder.py. The output
+        # of the Popularity-aware User Encoder in figure 2 in the paper.
         user_vec = AttentivePoolingQKY(50, 800, 400)([user_vec_query, user_vecs])
 
     # Pepijn: This is for w/o news popularity in figure 9.
     else:
 
-        # Pepijn: Same as above, but without the popularity embeddings.
+        # Pepijn: Same as above, but without the popularity embeddings. ContentPopularityJoinAttention stuff.
         user_vecs = Attention(20, 20)([user_vecs, user_vecs, user_vecs])
         user_vecs = Dropout(0.2)(user_vecs)
+
+        # Pepijn: The output of the user encoder, the user embeddings u. So the output of the
+        # PopularityAwareUserEncoer module in user_encoder.py. The output of the Popularity-aware
+        # User Encoder in figure 2 in the paper. But of course, without the popularity embeddings used
+        # in the process.
         user_vec = AttentivePooling(max_clicked_news, 400)(user_vecs)
 
     # Pepijn: This is were the user encoder stuff ends, and the popularity
@@ -672,9 +705,9 @@ def create_pe_model(
         vec1 = keras.layers.Lambda(lambda x: x[:, :400])(bias_content_vec)
 
         # Pepijn: The recency embeddings r, the last 100 elements of the combined vector.
-        # Q: In our code we still convert the recency to the embeddings. Here its already done...
-        # They dont have our RecencyEmbedding module (not in this part at least). Maybe will find 
-        # the answer later in code. 
+        # You might think, where is the recency embedding done? RecencyEmbedding module in
+        # our code: well its after this if statement. 'Beauty' of keras, you can just
+        # define stuff in random order.
         vec2 = keras.layers.Lambda(lambda x: x[:, 400:])(bias_content_vec)
 
         # Pepijn: Here the news embeddings are passed through the Dense network.
@@ -722,8 +755,10 @@ def create_pe_model(
             lambda x: (1 - x[0]) * x[1] + x[0] * x[2]
         )([gate, bias_content_score, bias_recency_score])
 
-        # Pepijn: Combining the inputs and outputs to create the model. So this is like the
-        # TimeAwarePopularityPredictor in our code.
+        # Pepijn: Combining the inputs and outputs to create the model. So this is almost the
+        # TimeAwarePopularityPredictor in our code, only that the ctrs arent incorporated yet.
+        # The thing outputted by this model would be the popularity score $\hat{p}$ or p, not yet
+        # $s_p$.
         bias_content_scorer = Model(bias_content_vec, bias_content_score)
 
     # Pepijn: This is the w/o news recency case in figure 10.
@@ -744,48 +779,126 @@ def create_pe_model(
         # Pepijn: The output of ContentBasedPopularityDense in our code. So $\hat{p}_c$ or pc
         bias_content_score = Dense(1, use_bias=False)(vec)
 
-        # Pepijn: Combining the inputs and outputs to create the model. So this is like the
-        # TimeAwarePopularityPredictor in our code, but without using the recencies.
+        # Pepijn: Combining the inputs and outputs to create the model. So again, this is almost
+        # the TimeAwarePopularityPredictor in our code, but no crts used yet. So the output of this model
+        # would be the popularity score $\hat{p}$ or p, not yet $s_p$. And of course in this else statement
+        # the recencies are skipped, making it just $\hat{p}_c$ or pc. So pc == p in this case.
         bias_content_scorer = Model(bias_content_vec, bias_content_score)
 
+    # Pepijn: And finally, the RecencyEmbedding module in our code.
     time_embedding_layer = Embedding(1500, 100, trainable=True)
+
+    # Pepijn: The recency embeddings r, the output of the RecencyEmbedding module in our code.
     time_embedding = time_embedding_layer(candidates_rece_emb_index)
 
+    # Pepijn: These `candidate_vecs` are the news embeddings n that are going to be dot-producted
+    # with the user embeddings u, to form the personalized matching scores. Take a look at figure 2
+    # in the paper (the overall architecture), then it becomes clear. So from this we can see there
     candidate_vecs = TimeDistributed(news_encoder)(candidates)
+
+    # Pepijn: These `bias_candidate_vecs` are the news embeddings n that are going to be used in the
+    # Time-Aware Popularity Predictor when looking at figure 2. So this is the News Encoder module
+    # when looking at figure 4.
     bias_candidate_vecs = TimeDistributed(bias_news_encoder)(candidates)
+
+    # Pepijn: Remember from before, from the earlier rece_emb if statement, that their
+    # bias_content_scorer (our TimeAwarePopularityPredictor) could expect either a 400 or 500
+    # dimensional input. With or without the recency embeddings. For their experiment in figure 10.
     if model_config["rece_emb"]:
         bias_candidate_vecs = keras.layers.Concatenate(axis=-1)(
             [bias_candidate_vecs, time_embedding]
         )
+
+    # Pepijn: `bias_candidate_score` would be $\hat{p}$ or p in the paper.
+    # Not yet $s_p$! The full output of the Time-Aware Popularity Predictor.
     bias_candidate_score = TimeDistributed(bias_content_scorer)(bias_candidate_vecs)
+
+    # Pepijn: Just some reshaping because the second dimension is now 1, so we can leave it out
     bias_candidate_score = keras.layers.Reshape((1 + config["npratio"],))(
         bias_candidate_score
     )
 
+    # Pepijn: The personalized matching scores $s_m$ in the paper (look at figure 2).
     rel_scores = keras.layers.Dot(axes=-1)([user_vec, candidate_vecs])
 
+    # Pepijn: Now they do some popularity predictor stuff again. This `scalar`, a
+    # Dense layer with 1 unit, is just the scalar. weight for the crts in the
+    # Time-Aware Popularity Predictor. So the $w_c$ in the paper, in figure 4.
     scaler = Dense(
         1, use_bias=False, kernel_initializer=keras.initializers.Constant(value=19)
     )
+
+    # Pepijn: The click through rates, the crts, are scaled by the scalar weight $w_c$.
+    # First some reshaping is needed to make it work with the overkill Dense layer.
     ctrs = keras.layers.Reshape((1 + config["npratio"], 1))(candidates_ctr)
+    # Pepijn: Actually using the scalar weight $w_c$ on the crts.
     ctrs = scaler(ctrs)
+    # Pepijn: And then they revert the reshaping that was needed.
     bias_ctr_score = keras.layers.Reshape((1 + config["npratio"],))(ctrs)
 
+    # Pepijn: This is used later in creating the final `model`. This `model` is
+    # returned, and in Main.ipynb, its only fitted/trained. Then the other stuff returned
+    # is used for evaluation. Only the line right under `create_pe_model` in Main.ipynb uses
+    # this `model`, namely: model.fit_generator(train_generator,epochs=2). So what I think has
+    # happened, is that the train_generator also produces some 'activity' data, but this data
+    # is not used in the model, as this `user_activity_input` thing you see here is not linked
+    # to any outputs of the model, so its not used anywhere. The author was probably planning
+    # to also use it, or was just too lazy to remove it from the train generator. In other words,
+    # just ignore this line.
     user_activity_input = keras.layers.Input((1,), dtype="int32")
 
+    # Pepijn: This network here is used in the personalized aggregator gate they talk about in
+    # 3.5 of the paper, used to produce $\eta$ in formula (3) based on the user embeddings u.
+    # Just like for the gates in the Time-Aware Popularity Predictor, the authors lie about using
+    # a two layer network, with 100 dimensional hidden units (they state this in section 4.1). Instead
+    # they use this three layer network, with 128 and 64 dimensional hidden units you can see here.
+    # In our code this is called PersonalizedAggregatorGate, which you can find in pprec.py.
     user_vec_input = keras.layers.Input(
         (400,),
     )
     activity_gate = Dense(128, activation="tanh")(user_vec_input)
+    # Pepijn: And I think I even found an actual mistake by the authors here.
+    # They abviously intended to input the `activity_gate` into the next layer,
+    # but they accidentally input the `user_vec_input` into it again. So the netwerk
+    # becomes 400 -> 64 -> 1, instead of 400 -> 128 -> 64 -> 1. Jeezzzz.
     activity_gate = Dense(64, activation="tanh")(user_vec_input)
     activity_gate = Dense(1, activation="sigmoid")(activity_gate)
     activity_gate = keras.layers.Reshape((1,))(activity_gate)
     activity_gater = Model(user_vec_input, activity_gate)
-
+    # Pepijn: So this is the output of the gate, so $\eta$ in figure 2 in the paper.
+    # Our output of the PersonalizedAggregatorGate in pprec.py.
     user_activtiy = activity_gater(user_vec)
 
+    # Pepijn: In this part, the actual output of the full PPRec model is created.
+    # So $s$, the ranking score. The result of formula (3) in section 3.5 in the paper.
+    #
+    # Some quick reminders make this clearer.
+    #   rel_sores $s_m$ is the personalized matching score, how much the user embeddings $u$ match the news embeddings.
+    #   bias_candidate_score $\hat{p}$ is content-based news popularity.
+    #   bias_ctr_score these are the click through rates, already scaled by the scalar weight $w_c$.
+    #
+    # Something to note is that: The second scalar parameter/weight $w_p$ is missing.
+    # Expanding on this topic: If you would try to get the output score just the regular way, the way
+    # the authors describe in the paper, without all the experimenting options stuff. Then you would expect
+    # the authors to first calculate the final popularity score $s_p$ by adding the content-based popularity
+    # score $\hat{p}$ and the click through rates weighted by the parameter $w_c$. But then we're missing
+    # something right? Namely, in figure 4 there also is a weight for the $\hat{p}$, called $w_p$. This second
+    # weight is nowhere to be found in the code... I think this is because, in theory, the model has the same
+    # expressability without this weight. The parameters for the part of the model creating the the personalized
+    # matching scores $s_m$, and the other weight $w_c$, could just adjust to the absence of this weight. It does
+    # not add any expressability to the model. So the authors probably just left it out to keep the number of
+    # parameters lower, even if its just one. But it was probably still clearer to include it in the explanation
+    # in the paper. To summarize this paragraph: the authors left out the $w_p$ weight which is shown in figure 4,
+    # because it wouldnt improve the model.
+
     scores = []
+
+    # Pepijn: This if adds scores if you want to have let the user encoder have influence on the scores.
     if model_config["rel"]:
+
+        # Pepijn: This if adds scores if you cant to use use $\eta$ in the final score.
+        # Same for the other two similar ifs. Aka you can turn of the influnce of the user
+        # embeddings u on the personalized aggregator.
         if model_config["activity"]:
             print(user_activtiy.shape)
             print(rel_scores.shape)
@@ -795,12 +908,17 @@ def create_pe_model(
             print(rel_scores.shape)
 
         scores.append(rel_scores)
+
+    # These two ifs add scores if you want to have the popularity encoder have influence on the scores.
+    # This first if when you only if you want to have the content-based popularity score $\hat{p}$ in the final score.
     if model_config["content"]:
         if model_config["activity"]:
             bias_candidate_score = keras.layers.Lambda(lambda x: 2 * x[0] * (1 - x[1]))(
                 [bias_candidate_score, user_activtiy]
             )
         scores.append(bias_candidate_score)
+
+    # This second popularity encoder related if, when you only want to have the click through rates in the final score.
     if model_config["ctr"]:
         if model_config["activity"]:
             bias_ctr_score = keras.layers.Lambda(lambda x: 2 * x[0] * (1 - x[1]))(
@@ -808,30 +926,45 @@ def create_pe_model(
             )
         scores.append(bias_ctr_score)
 
+    # Pepijn: Summing all these separate scores to get the final score $s$. Because this is Keras,
+    # you cant just sum them, you have to use the Add layer.
     if len(scores) > 1:
         scores = keras.layers.Add()(scores)
     else:
         scores = scores[0]
+
+    # Pepijn: And again something not stated in the paper. They softmax to make the logits of the
+    # positive and negative article sum to one. This probably gives better results, maybe something
+    # to do with the sigmoid in the loss function, making this a bit more stable.
     logits = keras.layers.Activation(keras.activations.softmax, name="recommend")(
         scores
     )
 
+    # Pepijn: The full model used for training in Main.ipynb.
     model = Model(
         [
-            candidates,
-            candidates_ctr,
-            candidates_rece_emb_index,
-            user_activity_input,
-            clicked_input,
-            clicked_ctr,
+            candidates,  # The candidate articles (their content vectors)
+            candidates_ctr,  # The click through rates of the candidate articles, floats probably between 0 and 1
+            candidates_rece_emb_index,  # The recencies of the candidate articles
+            user_activity_input,  # This one is not used in the model, so ignore it. Probably just a leftover from the train generator.
+            clicked_input,  # The clicked articles (their content vectors)
+            clicked_ctr,  # The click through rates of the clicked articles, ints probably between 0 and 200.
         ],
         [logits],
     )
 
+    # Pepijn: This finds all computation steps in the model to map all the inputs we defined to outputs.
+    # I the loss function in their paper can be rewritten as a categorical crossentropy loss, with two 
+    # classes, the positive and negative article. But yeah bit weird. 
     model.compile(
         loss=["categorical_crossentropy"], optimizer=Adam(lr=0.0001), metrics=["acc"]
     )
 
+    # Pepijn: they still formulate the final user encoder as a separe model, so they can use it doing
+    # evaluation. In Keras, by training the `model` the weights of the `user_encoder`, as well as
+    # all the other included and returned models are also trained. In our pytorch version, we could just
+    # train an PPRec instance, lets call it `pprec_model`, and then use `ue = pprec_model.user_encoder` to
+    # use and evaluate the user encoder `ue` separately.
     user_encoder = Model([clicked_input, clicked_ctr], user_vec)
 
     return (
