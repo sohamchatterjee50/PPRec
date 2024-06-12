@@ -118,10 +118,36 @@ class NRMSDataLoader(NewsrecDataLoader):
         his_input_title = np.squeeze(his_input_title, axis=2)
         return (his_input_title, pred_input_title), batch_y
 
-@dataclass
+@dataclass(kw_only=True)
 class PPRecDataLoader(NewsrecDataLoader):
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        return df.pipe(
+    # unknown_category_value: int = 0
+    # unknown_subcategory_value: int = 0
+    body_mapping: dict[int, list[int]] = None
+    # category_mapping: dict[int, int] = None
+    # subcategory_mapping: dict[int, int] = None
+
+    def __post_init__(self):
+        self.title_prefix = "title_"
+        self.body_prefix = "ner_clusters_text_"
+        # self.category_prefix = "category_"
+        # self.subcategory_prefix = "subcategory_"
+        (
+            self.lookup_article_index_body,
+            self.lookup_article_matrix_body,
+        ) = create_lookup_objects(
+            self.body_mapping, unknown_representation=self.unknown_representation
+        )
+        # if self.eval_mode:
+        #     raise ValueError("'eval_mode = True' is not implemented for NAML")
+
+        return super().__post_init__()
+
+    def transform(self, df: pl.DataFrame) -> tuple[pl.DataFrame]:
+        """
+        Special case for NAML as it requires body-encoding, verticals, & subvertivals
+        """
+        # =>
+        title = df.pipe(
             map_list_article_id_to_value,
             behaviors_column=self.history_column,
             mapping=self.lookup_article_index,
@@ -134,44 +160,117 @@ class PPRecDataLoader(NewsrecDataLoader):
             fill_nulls=self.unknown_index,
             drop_nulls=False,
         )
+        # =>
+        body = df.pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.history_column,
+            mapping=self.lookup_article_index_body,
+            fill_nulls=self.unknown_index,
+            drop_nulls=False,
+        ).pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.inview_col,
+            mapping=self.lookup_article_index_body,
+            fill_nulls=self.unknown_index,
+            drop_nulls=False,
+        )
+        
+      
+        return (
+            pl.DataFrame()
+            .with_columns(title.select(pl.all().name.prefix(self.title_prefix)))
+            .with_columns(body.select(pl.all().name.prefix(self.body_prefix)))
+            
+        )
 
     def __getitem__(self, idx) -> tuple[tuple[np.ndarray], np.ndarray]:
-        """
-        his_input_title:    (samples, history_size, document_dimension)
-        pred_input_title:   (samples, npratio, document_dimension)
-        batch_y:            (samples, npratio)
-        """
         batch_X = self.X[idx * self.batch_size : (idx + 1) * self.batch_size].pipe(
             self.transform
         )
         batch_y = self.y[idx * self.batch_size : (idx + 1) * self.batch_size]
         # =>
         if self.eval_mode:
-            repeats = np.array(batch_X["n_samples"])
+            print(batch_X.columns)
+            repeats_title = np.array(batch_X["title_n_samples"])
+            repeats_body = np.array(batch_X["ner_clusters_text_n_samples"])
             # =>
             batch_y = np.array(batch_y.explode().to_list()).reshape(-1, 1)
             # =>
+            
+            # =>
             his_input_title = repeat_by_list_values_from_matrix(
-                batch_X[self.history_column].to_list(),
+                batch_X[self.title_prefix + self.history_column].to_list(),
                 matrix=self.lookup_article_matrix,
-                repeats=repeats,
+                repeats=repeats_title,
             )
+            
             # =>
             pred_input_title = self.lookup_article_matrix[
-                batch_X[self.inview_col].explode().to_list()
+                batch_X[self.title_prefix + self.inview_col].explode().to_list()
             ]
+
+            his_input_body = repeat_by_list_values_from_matrix(
+                batch_X[self.body_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix,
+                repeats=repeats_body,
+            )
+            # =>
+            pred_input_body = self.lookup_article_matrix[
+                batch_X[self.body_prefix + self.inview_col].explode().to_list()
+            ]
+           
+            his_input_title = np.squeeze(
+                his_input_title, axis=2
+                )
+                
+            his_input_body = np.squeeze(
+                    his_input_body, axis=2
+                    )
+            
+
         else:
             batch_y = np.array(batch_y.to_list())
-            his_input_title = self.lookup_article_matrix[
-                batch_X[self.history_column].to_list()
-            ]
-            pred_input_title = self.lookup_article_matrix[
-                batch_X[self.inview_col].to_list()
-            ]
-            pred_input_title = np.squeeze(pred_input_title, axis=2)
-
-        his_input_title = np.squeeze(his_input_title, axis=2)
-        return (his_input_title, pred_input_title), batch_y
+            
+            his_input_title = np.array(
+                batch_X[self.title_prefix + self.history_column].to_list()
+            )
+            his_input_body = np.array(
+                batch_X[self.body_prefix + self.history_column].to_list()
+            )
+            
+            pred_input_title = np.array(
+                batch_X[self.title_prefix + self.inview_col].to_list()
+            )
+            pred_input_body = np.array(
+                batch_X[self.body_prefix + self.inview_col].to_list()
+            )
+            
+            
+            pred_input_title = np.squeeze(
+                self.lookup_article_matrix[pred_input_title], axis=2
+            )
+            
+            pred_input_body = np.squeeze(
+                self.lookup_article_matrix_body[pred_input_body], axis=2
+            )
+            
+           
+            
+            his_input_title = np.squeeze(
+                self.lookup_article_matrix[his_input_title], axis=2
+                )
+                
+            his_input_body = np.squeeze(
+                    self.lookup_article_matrix_body[his_input_body], axis=2
+                    )
+        
+       
+        return (
+            his_input_title,
+            his_input_body,
+            pred_input_title,
+            pred_input_body
+        ), batch_y
 
 
 @dataclass(kw_only=True)
@@ -280,8 +379,8 @@ class NAMLDataLoader(NewsrecDataLoader):
         ) = create_lookup_objects(
             self.body_mapping, unknown_representation=self.unknown_representation
         )
-        if self.eval_mode:
-            raise ValueError("'eval_mode = True' is not implemented for NAML")
+        # if self.eval_mode:
+        #     raise ValueError("'eval_mode = True' is not implemented for NAML")
 
         return super().__post_init__()
 
@@ -361,53 +460,132 @@ class NAMLDataLoader(NewsrecDataLoader):
         )
         batch_y = self.y[idx * self.batch_size : (idx + 1) * self.batch_size]
         # =>
-        batch_y = np.array(batch_y.to_list())
-        his_input_title = np.array(
-            batch_X[self.title_prefix + self.history_column].to_list()
-        )
-        his_input_body = np.array(
-            batch_X[self.body_prefix + self.history_column].to_list()
-        )
-        his_input_vert = np.array(
-            batch_X[self.category_prefix + self.history_column].to_list()
-        )[:, :, np.newaxis]
-        his_input_subvert = np.array(
-            batch_X[self.subcategory_prefix + self.history_column].to_list()
-        )[:, :, np.newaxis]
+        if self.eval_mode:
+            print(batch_X.columns)
+            repeats_title = np.array(batch_X["title_n_samples"])
+            repeats_body = np.array(batch_X["body_n_samples"])
+            # =>
+            batch_y = np.array(batch_y.explode().to_list()).reshape(-1, 1)
+            # =>
+            
+            # =>
+            his_input_title = repeat_by_list_values_from_matrix(
+                batch_X[self.title_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix,
+                repeats=repeats_title,
+            )
+            
+            # =>
+            pred_input_title = self.lookup_article_matrix[
+                batch_X[self.title_prefix + self.inview_col].explode().to_list()
+            ]
+            print("HERE After Title")
+            his_input_body = repeat_by_list_values_from_matrix(
+                batch_X[self.body_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix,
+                repeats=repeats_body,
+            )
+            # =>
+            pred_input_body = self.lookup_article_matrix[
+                batch_X[self.body_prefix + self.inview_col].explode().to_list()
+            ]
+            print("Here after body")
+            his_input_title = np.squeeze(
+                his_input_title, axis=2
+                )
+                
+            his_input_body = np.squeeze(
+                    his_input_body, axis=2
+                    )
+            # his_input_vert = repeat_by_list_values_from_matrix(
+            #     batch_X[self.category_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix_body,
+            #     repeats=repeats,
+            # )
+            # =>
+            
+
+            # his_input_subvert = repeat_by_list_values_from_matrix(
+            #     batch_X[self.subcategory_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix_body,
+            #     repeats=repeats,
+            # )
+            # # =>
+            # pred_input_subvert = self.lookup_article_matrix_body[
+            #     batch_X[self.subcategory_prefix + self.inview_col].explode().to_list()
+            # ]
+
+
+        else:
+            batch_y = np.array(batch_y.to_list())
+            
+            his_input_title = np.array(
+                batch_X[self.title_prefix + self.history_column].to_list()
+            )
+            his_input_body = np.array(
+                batch_X[self.body_prefix + self.history_column].to_list()
+            )
+            # his_input_vert = np.array(
+            #     batch_X[self.category_prefix + self.history_column].to_list()
+            # )[:, :, np.newaxis]
+            # his_input_subvert = np.array(
+            #     batch_X[self.subcategory_prefix + self.history_column].to_list()
+            # )[:, :, np.newaxis]
+            # =>
+            pred_input_title = np.array(
+                batch_X[self.title_prefix + self.inview_col].to_list()
+            )
+            pred_input_body = np.array(
+                batch_X[self.body_prefix + self.inview_col].to_list()
+            )
+            # pred_input_vert = np.array(
+            #     batch_X[self.category_prefix + self.inview_col].to_list()
+            # )[:, :, np.newaxis]
+            # pred_input_subvert = np.array(
+            #     batch_X[self.subcategory_prefix + self.inview_col].to_list()
+            # )[:, :, np.newaxis]
+            # =>
+            
+            pred_input_title = np.squeeze(
+                self.lookup_article_matrix[pred_input_title], axis=2
+            )
+            
+            pred_input_body = np.squeeze(
+                self.lookup_article_matrix_body[pred_input_body], axis=2
+            )
+            
+            # pred_input_vert = np.squeeze(
+            #     self.lookup_article_matrix[pred_input_vert], axis=2
+            # )
+            
+            # pred_input_subvert = np.squeeze(
+            #     self.lookup_article_matrix_body[pred_input_subvert], axis=2
+            # )
+            
+            his_input_title = np.squeeze(
+                self.lookup_article_matrix[his_input_title], axis=2
+                )
+                
+            his_input_body = np.squeeze(
+                    self.lookup_article_matrix_body[his_input_body], axis=2
+                    )
+        
+        # his_input_vert = np.squeeze(
+        #         self.lookup_article_matrix_body[his_input_vert], axis=2
+        #     )
+        # print("I  here")
+        # his_input_subvert = np.squeeze(
+        #         self.lookup_article_matrix_body[his_input_subvert], axis=2
+        #     )
         # =>
-        pred_input_title = np.array(
-            batch_X[self.title_prefix + self.inview_col].to_list()
-        )
-        pred_input_body = np.array(
-            batch_X[self.body_prefix + self.inview_col].to_list()
-        )
-        pred_input_vert = np.array(
-            batch_X[self.category_prefix + self.inview_col].to_list()
-        )[:, :, np.newaxis]
-        pred_input_subvert = np.array(
-            batch_X[self.subcategory_prefix + self.inview_col].to_list()
-        )[:, :, np.newaxis]
-        # =>
-        his_input_title = np.squeeze(
-            self.lookup_article_matrix[his_input_title], axis=2
-        )
-        pred_input_title = np.squeeze(
-            self.lookup_article_matrix[pred_input_title], axis=2
-        )
-        his_input_body = np.squeeze(
-            self.lookup_article_matrix_body[his_input_body], axis=2
-        )
-        pred_input_body = np.squeeze(
-            self.lookup_article_matrix_body[pred_input_body], axis=2
-        )
-        # =>
+        print("DONE ALL")
         return (
             his_input_title,
             his_input_body,
-            his_input_vert,
-            his_input_subvert,
+            # his_input_vert,
+            # his_input_subvert,
             pred_input_title,
             pred_input_body,
-            pred_input_vert,
-            pred_input_subvert,
+            # pred_input_vert,
+            # pred_input_subvert,
         ), batch_y

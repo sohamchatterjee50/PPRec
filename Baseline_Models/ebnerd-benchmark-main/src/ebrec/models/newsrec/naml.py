@@ -71,7 +71,7 @@ class NAMLModel(BaseModel):
         his_input_title_body_verts = keras.Input(
             shape=(
                 self.hparams.history_size,
-                self.hparams.title_size + self.hparams.body_size + 2,
+                self.hparams.title_size + self.hparams.body_size ,
             ),
             dtype="int32",
         )
@@ -99,7 +99,7 @@ class NAMLModel(BaseModel):
             object: the news encoder of NAML.
         """
         input_title_body_verts = keras.Input(
-            shape=(self.hparams.title_size + self.hparams.body_size + 2,), dtype="int32"
+            shape=(self.hparams.title_size + self.hparams.body_size), dtype="int32"
         )
 
         sequences_input_title = layers.Lambda(
@@ -112,26 +112,26 @@ class NAMLModel(BaseModel):
                 + self.hparams.body_size,
             ]
         )(input_title_body_verts)
-        input_vert = layers.Lambda(
-            lambda x: x[
-                :,
-                self.hparams.title_size
-                + self.hparams.body_size : self.hparams.title_size
-                + self.hparams.body_size
-                + 1,
-            ]
-        )(input_title_body_verts)
-        input_subvert = layers.Lambda(
-            lambda x: x[:, self.hparams.title_size + self.hparams.body_size + 1 :]
-        )(input_title_body_verts)
+        # input_vert = layers.Lambda(
+        #     lambda x: x[
+        #         :,
+        #         self.hparams.title_size
+        #         + self.hparams.body_size : self.hparams.title_size
+        #         + self.hparams.body_size
+        #         + 1,
+        #     ]
+        # )(input_title_body_verts)
+        # input_subvert = layers.Lambda(
+        #     lambda x: x[:, self.hparams.title_size + self.hparams.body_size + 1 :]
+        # )(input_title_body_verts)
 
         title_repr = self._build_titleencoder(embedding_layer)(sequences_input_title)
         body_repr = self._build_bodyencoder(embedding_layer)(sequences_input_body)
-        vert_repr = self._build_vertencoder()(input_vert)
-        subvert_repr = self._build_subvertencoder()(input_subvert)
+        # vert_repr = self._build_vertencoder()(input_vert)
+        # subvert_repr = self._build_subvertencoder()(input_subvert)
 
         concate_repr = layers.Concatenate(axis=-2)(
-            [title_repr, body_repr, vert_repr, subvert_repr]
+            [title_repr, body_repr]
         )
         news_repr = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(
             concate_repr
@@ -266,12 +266,7 @@ class NAMLModel(BaseModel):
         his_input_body = keras.Input(
             shape=(self.hparams.history_size, self.hparams.body_size), dtype="int32"
         )
-        his_input_vert = keras.Input(
-            shape=(self.hparams.history_size, 1), dtype="int32"
-        )
-        his_input_subvert = keras.Input(
-            shape=(self.hparams.history_size, 1), dtype="int32"
-        )
+      
 
         pred_input_title = keras.Input(
             # shape=(hparams.npratio + 1, hparams.title_size),
@@ -285,9 +280,7 @@ class NAMLModel(BaseModel):
         )
         # pred_input_vert = keras.Input(shape=(hparams.npratio + 1, 1), dtype="int32")
         # pred_input_subvert = keras.Input(shape=(hparams.npratio + 1, 1), dtype="int32")
-        pred_input_vert = keras.Input(shape=(None, 1), dtype="int32")
-        pred_input_subvert = keras.Input(shape=(None, 1), dtype="int32")
-
+        
         pred_input_title_one = keras.Input(
             shape=(
                 1,
@@ -302,23 +295,23 @@ class NAMLModel(BaseModel):
             ),
             dtype="int32",
         )
-        pred_input_vert_one = keras.Input(shape=(1, 1), dtype="int32")
-        pred_input_subvert_one = keras.Input(shape=(1, 1), dtype="int32")
-
+        
+        
+        
         his_title_body_verts = layers.Concatenate(axis=-1)(
-            [his_input_title, his_input_body, his_input_vert, his_input_subvert]
+            [his_input_title, his_input_body]
         )
 
         pred_title_body_verts = layers.Concatenate(axis=-1)(
-            [pred_input_title, pred_input_body, pred_input_vert, pred_input_subvert]
+            [pred_input_title, pred_input_body]
         )
 
         pred_title_body_verts_one = layers.Concatenate(axis=-1)(
             [
                 pred_input_title_one,
                 pred_input_body_one,
-                pred_input_vert_one,
-                pred_input_subvert_one,
+                # pred_input_vert_one,
+                # pred_input_subvert_one,
             ]
         )
         pred_title_body_verts_one = layers.Reshape((-1,))(pred_title_body_verts_one)
@@ -347,12 +340,12 @@ class NAMLModel(BaseModel):
             [
                 his_input_title,
                 his_input_body,
-                his_input_vert,
-                his_input_subvert,
+                # his_input_vert,
+                # his_input_subvert,
                 pred_input_title,
                 pred_input_body,
-                pred_input_vert,
-                pred_input_subvert,
+                # pred_input_vert,
+                # pred_input_subvert,
             ],
             preds,
         )
@@ -361,12 +354,12 @@ class NAMLModel(BaseModel):
             [
                 his_input_title,
                 his_input_body,
-                his_input_vert,
-                his_input_subvert,
+                # his_input_vert,
+                # his_input_subvert,
                 pred_input_title_one,
                 pred_input_body_one,
-                pred_input_vert_one,
-                pred_input_subvert_one,
+                # pred_input_vert_one,
+                # pred_input_subvert_one,
             ],
             pred_one,
         )

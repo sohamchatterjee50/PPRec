@@ -1,194 +1,343 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-from ebrec.models.newsrec.layers import AttLayer2, SelfAttention, AttentivePoolingQKY,Attention
-import tensorflow as tf
+from tensorflow.keras import layers
+import tensorflow.keras as keras
 import numpy as np
 
+from ebrec.models.newsrec.base_model import BaseModel
+from ebrec.models.newsrec.layers import AttLayer2
 
-class PPRecModel:
-    """PPRec model
+__all__ = ["PPRecModel"]
+
+
+class PPRecModel(BaseModel):
+    """PPRec model(Neural News Recommendation with Attentive Multi-View Learning)
+
+    
+
+    Attributes:
+        word2vec_embedding (numpy.ndarray): Pretrained word embedding matrix.
+        hparam (object): Global hyper-parameters.
     """
 
     def __init__(
         self,
-        hparams: dict,
-        word2vec_embedding: np.ndarray = None,
-        word_emb_dim: int = 300,
-        vocab_size: int = 32000,
-        seed: int = None,
+        hparams,
+        n_users: int = 50000,
+        word2vec_embedding=None,
+        seed=None,
+        **kwargs,
     ):
-        """Initialization steps for PPRec."""
-        self.hparams = hparams
-        self.seed = seed
+        """Initialization steps for PPRec.
+        Compared with the BaseModel, PPRec need word embedding.
+        After creating word embedding matrix, BaseModel's __init__ method will be called.
 
-        # SET SEED:
-        tf.random.set_seed(seed)
-        np.random.seed(seed)
+        Args:
+            hparams (object): Global hyper-parameters. Some key setttings such as filter_num are there.
+            iterator_creator_train (object): PPRec data loader class for train data.
+            iterator_creator_test (object): PPRec data loader class for test and validation data
+        """
 
-        # INIT THE WORD-EMBEDDINGS:
-        if word2vec_embedding is None:
-            self.word2vec_embedding = np.random.rand(vocab_size, word_emb_dim)
-        else:
-            self.word2vec_embedding = word2vec_embedding
+        self.n_users = n_users
 
-        # BUILD AND COMPILE MODEL:
-        self.model, self.scorer = self._build_graph()
-        data_loss = self._get_loss(self.hparams.loss)
-        train_optimizer = self._get_opt(
-            optimizer=self.hparams.optimizer, lr=self.hparams.learning_rate
+        super().__init__(
+            hparams=hparams,
+            word2vec_embedding=word2vec_embedding,
+            seed=seed,
+            **kwargs,
         )
-        self.model.compile(loss=data_loss, optimizer=train_optimizer)
-
-    def _get_loss(self, loss: str):
-        """Make loss function, consists of data loss and regularization loss
-        Returns:
-            object: Loss function or loss function name
-        """
-        if loss == "cross_entropy_loss":
-            data_loss = "categorical_crossentropy"
-        elif loss == "log_loss":
-            data_loss = "binary_crossentropy"
-        else:
-            raise ValueError(f"this loss not defined {loss}")
-        return data_loss
-
-    def _get_opt(self, optimizer: str, lr: float):
-        """Get the optimizer according to configuration. Usually we will use Adam.
-        Returns:
-            object: An optimizer.
-        """
-        # TODO: shouldn't be a string input you should just set the optimizer, to avoid stuff like this:
-        # => 'WARNING:absl:At this time, the v2.11+ optimizer `tf.keras.optimizers.Adam` runs slowly on M1/M2 Macs, please use the legacy Keras optimizer instead, located at `tf.keras.optimizers.legacy.Adam`.'
-        if optimizer == "adam":
-            train_opt = tf.keras.optimizers.legacy.Adam(learning_rate=lr)
-        else:
-            raise ValueError(f"this optimizer not defined {optimizer}")
-        return train_opt
 
     def _build_graph(self):
-        """Build PPRec model and scorer.
+        """Build NAML model and scorer.
 
         Returns:
             object: a model used to train.
             object: a model used to evaluate and inference.
         """
-        model, scorer = self._build_pprec()
+
+        model, scorer = self._build_naml()
         return model, scorer
 
-    def _build_userencoder(self, titleencoder):
-        """The main function to create user encoder of PPRec.
+    def _build_userencoder(self, newsencoder):
+        """The main function to create user encoder of NAML.
 
         Args:
-            titleencoder (object): the news encoder of PPRec.
+            newsencoder (object): the news encoder of NAML.
 
         Return:
-            object: the user encoder of PPRec.
+            object: the user encoder of NAML.
         """
-        his_input_title = tf.keras.Input(
-            shape=(self.hparams.history_size, self.hparams.title_size), dtype="int32"
+        his_input_title_body_verts = keras.Input(
+            shape=(
+                self.hparams.history_size,
+                self.hparams.title_size + self.hparams.body_size ,
+            ),
+            dtype="int32",
         )
 
-        click_title_presents = tf.keras.layers.TimeDistributed(titleencoder)(
-            his_input_title
+        click_news_presents = layers.TimeDistributed(newsencoder)(
+            his_input_title_body_verts
         )
-        y = SelfAttention(self.hparams.head_num, self.hparams.head_dim, seed=self.seed)(
-            [click_title_presents] * 3
+        user_present = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(
+            click_news_presents
         )
-        user_present = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = tf.keras.Model(his_input_title, user_present, name="user_encoder")
+        model = keras.Model(
+            his_input_title_body_verts, user_present, name="user_encoder"
+        )
         return model
 
-    def _build_newsencoder(self):
-        """The main function to create news encoder of PPRec.
+    def _build_newsencoder(self, embedding_layer):
+        """The main function to create news encoder of NAML.
+        news encoder in composed of title encoder, body encoder, vert encoder and subvert encoder
 
         Args:
             embedding_layer (object): a word embedding layer.
 
         Return:
-            object: the news encoder of PPRec.
+            object: the news encoder of NAML.
         """
-        embedding_layer = tf.keras.layers.Embedding(
-            self.word2vec_embedding.shape[0],
-            self.word2vec_embedding.shape[1],
-            weights=[self.word2vec_embedding],
-            trainable=True,
+        input_title_body_verts = keras.Input(
+            shape=(self.hparams.title_size + self.hparams.body_size), dtype="int32"
         )
-        sequences_input_title = tf.keras.Input(
+
+        sequences_input_title = layers.Lambda(
+            lambda x: x[:, : self.hparams.title_size]
+        )(input_title_body_verts)
+        sequences_input_body = layers.Lambda(
+            lambda x: x[
+                :,
+                self.hparams.title_size : self.hparams.title_size
+                + self.hparams.body_size,
+            ]
+        )(input_title_body_verts)
+        
+
+        title_repr = self._build_titleencoder(embedding_layer)(sequences_input_title)
+        body_repr = self._build_bodyencoder(embedding_layer)(sequences_input_body)
+       
+        concate_repr = layers.Concatenate(axis=-2)(
+            [title_repr, body_repr]
+        )
+        news_repr = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(
+            concate_repr
+        )
+
+        model = keras.Model(input_title_body_verts, news_repr, name="news_encoder")
+        return model
+
+    def _build_titleencoder(self, embedding_layer):
+        """build title encoder of NAML news encoder.
+
+        Args:
+            embedding_layer (object): a word embedding layer.
+
+        Return:
+            object: the title encoder of NAML.
+        """
+
+        sequences_input_title = keras.Input(
             shape=(self.hparams.title_size,), dtype="int32"
         )
         embedded_sequences_title = embedding_layer(sequences_input_title)
 
-        y = tf.keras.layers.Dropout(self.hparams.dropout)(embedded_sequences_title)
-        y = SelfAttention(self.hparams.head_num, self.hparams.head_dim, seed=self.seed)(
-            [y, y, y]
-        )
-        y = tf.keras.layers.Dropout(self.hparams.dropout)(y)
+        y = layers.Dropout(self.hparams.dropout)(embedded_sequences_title)
+        y = layers.Conv1D(
+            self.hparams.filter_num,
+            self.hparams.window_size,
+            activation=self.hparams.cnn_activation,
+            padding="same",
+            bias_initializer=keras.initializers.Zeros(),
+            kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
+        )(y)
+        y = layers.Dropout(self.hparams.dropout)(y)
         pred_title = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(y)
+        pred_title = layers.Reshape((1, self.hparams.filter_num))(pred_title)
 
-        model = tf.keras.Model(sequences_input_title, pred_title, name="news_encoder")
+        model = keras.Model(sequences_input_title, pred_title, name="title_encoder")
         return model
 
-    def _build_pprec(self):
-        """The main function to create PPRec's logic. The core of PPRec
+    def _build_bodyencoder(self, embedding_layer):
+        """build body encoder of NAML news encoder.
+
+        Args:
+            embedding_layer (object): a word embedding layer.
+
+        Return:
+            object: the body encoder of NAML.
+        """
+
+        sequences_input_body = keras.Input(
+            shape=(self.hparams.body_size,), dtype="int32"
+        )
+        embedded_sequences_body = embedding_layer(sequences_input_body)
+
+        y = layers.Dropout(self.hparams.dropout)(embedded_sequences_body)
+        y = layers.Conv1D(
+            self.hparams.filter_num,
+            self.hparams.window_size,
+            activation=self.hparams.cnn_activation,
+            padding="same",
+            bias_initializer=keras.initializers.Zeros(),
+            kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
+        )(y)
+        y = layers.Dropout(self.hparams.dropout)(y)
+        pred_body = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(y)
+        pred_body = layers.Reshape((1, self.hparams.filter_num))(pred_body)
+
+        model = keras.Model(sequences_input_body, pred_body, name="body_encoder")
+        return model
+
+    def _build_vertencoder(self):
+        """build vert encoder of NAML news encoder.
+
+        Return:
+            object: the vert encoder of NAML.
+        """
+        input_vert = keras.Input(shape=(1,), dtype="int32")
+
+        vert_embedding = layers.Embedding(
+            self.hparams.vert_num, self.hparams.vert_emb_dim, trainable=True
+        )
+
+        vert_emb = vert_embedding(input_vert)
+        pred_vert = layers.Dense(
+            self.hparams.filter_num,
+            activation=self.hparams.dense_activation,
+            bias_initializer=keras.initializers.Zeros(),
+            kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
+        )(vert_emb)
+        pred_vert = layers.Reshape((1, self.hparams.filter_num))(pred_vert)
+
+        model = keras.Model(input_vert, pred_vert, name="vert_encoder")
+        return model
+
+    def _build_subvertencoder(self):
+        """build subvert encoder of NAML news encoder.
+
+        Return:
+            object: the subvert encoder of NAML.
+        """
+
+        input_subvert = keras.Input(shape=(1,), dtype="int32")
+
+        subvert_embedding = layers.Embedding(
+            self.hparams.subvert_num, self.hparams.subvert_emb_dim, trainable=True
+        )
+
+        subvert_emb = subvert_embedding(input_subvert)
+        pred_subvert = layers.Dense(
+            self.hparams.filter_num,
+            activation=self.hparams.dense_activation,
+            bias_initializer=keras.initializers.Zeros(),
+            kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
+        )(subvert_emb)
+        pred_subvert = layers.Reshape((1, self.hparams.filter_num))(pred_subvert)
+
+        model = keras.Model(input_subvert, pred_subvert, name="subvert_encoder")
+        return model
+
+    def _build_naml(self):
+        """The main function to create NAML's logic. The core of NAML
         is a user encoder and a news encoder.
 
         Returns:
             object: a model used to train.
-            object: a model used to evaluate and inference.
+            object: a model used to evaluate and predict.
         """
 
-        his_input_title = tf.keras.Input(
-            shape=(self.hparams.history_size, self.hparams.title_size),
-            dtype="int32",
+        his_input_title = keras.Input(
+            shape=(self.hparams.history_size, self.hparams.title_size), dtype="int32"
         )
-        pred_input_title = tf.keras.Input(
-            # shape = (hparams.npratio + 1, hparams.title_size)
+        his_input_body = keras.Input(
+            shape=(self.hparams.history_size, self.hparams.body_size), dtype="int32"
+        )
+      
+
+        pred_input_title = keras.Input(
+            # shape=(hparams.npratio + 1, hparams.title_size),
             shape=(None, self.hparams.title_size),
             dtype="int32",
         )
-        pred_input_title_one = tf.keras.Input(
+        pred_input_body = keras.Input(
+            # shape=(hparams.npratio + 1, hparams.body_size),
+            shape=(None, self.hparams.body_size),
+            dtype="int32",
+        )
+       
+        
+        pred_input_title_one = keras.Input(
             shape=(
                 1,
                 self.hparams.title_size,
             ),
             dtype="int32",
         )
-        pred_title_one_reshape = tf.keras.layers.Reshape((self.hparams.title_size,))(
-            pred_input_title_one
+        pred_input_body_one = keras.Input(
+            shape=(
+                1,
+                self.hparams.body_size,
+            ),
+            dtype="int32",
         )
-        titleencoder = self._build_newsencoder()
-        self.userencoder = self._build_userencoder(titleencoder)
-        self.newsencoder = titleencoder
-
-        user_present = self.userencoder(his_input_title)
-        news_present = tf.keras.layers.TimeDistributed(self.newsencoder)(
-            pred_input_title
+        
+        
+        
+        his_title_body_verts = layers.Concatenate(axis=-1)(
+            [his_input_title, his_input_body]
         )
-        news_present_one = self.newsencoder(pred_title_one_reshape)
-        
-        # Add popularity to user modelling
-        # popularity_embedding_layer =  tf.keras.layers.Embedding(200, 400,trainable=True)
-        # clicked_ctr  = tf.keras.Input(shape=(50,),dtype='int32')
-        # news_input_length = int(self.newsencoder.input.shape[1])
-        # clicked_input = tf.keras.Input(shape=(50, news_input_length,), dtype='int32')
-        # user_present = tf.keras.layers.TimeDistributed(self.newsencoder)(clicked_input)
-        # popularity_embedding = popularity_embedding_layer(clicked_ctr)
-        # MHSA = Attention(50,50)
-        # user_present = MHSA([user_present,user_present,user_present,user_present,user_present])
-        # user_vec_query = tf.keras.layers.Concatenate(axis=-1)([user_present,popularity_embedding])
-        # user_vec_query = AttentivePoolingQKY(50,2900,2500)([user_vec_query,user_present])
-        
-        
-        
-        preds = tf.keras.layers.Dot(axes=-1)([news_present, user_present])
-        
-        preds = tf.keras.layers.Activation(activation="softmax")(preds)
-        pred_one = tf.keras.layers.Dot(axes=-1)([news_present_one, user_present])
-        pred_one = tf.keras.layers.Activation(activation="sigmoid")(pred_one)
-        model = tf.keras.Model([his_input_title, pred_input_title], preds)
-        scorer = tf.keras.Model([his_input_title, pred_input_title_one], pred_one)
 
-        
-        
+        pred_title_body_verts = layers.Concatenate(axis=-1)(
+            [pred_input_title, pred_input_body]
+        )
+
+        pred_title_body_verts_one = layers.Concatenate(axis=-1)(
+            [
+                pred_input_title_one,
+                pred_input_body_one,
+               
+            ]
+        )
+        pred_title_body_verts_one = layers.Reshape((-1,))(pred_title_body_verts_one)
+
+        embedding_layer = layers.Embedding(
+            self.word2vec_embedding.shape[0],
+            self.word2vec_embedding.shape[1],
+            weights=[self.word2vec_embedding],
+            trainable=True,
+        )
+
+        self.newsencoder = self._build_newsencoder(embedding_layer)
+        self.userencoder = self._build_userencoder(self.newsencoder)
+
+        user_present = self.userencoder(his_title_body_verts)
+        news_present = layers.TimeDistributed(self.newsencoder)(pred_title_body_verts)
+        news_present_one = self.newsencoder(pred_title_body_verts_one)
+
+        preds = layers.Dot(axes=-1)([news_present, user_present])
+        preds = layers.Activation(activation="softmax")(preds)
+
+        pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
+        pred_one = layers.Activation(activation="sigmoid")(pred_one)
+
+        model = keras.Model(
+            [
+                his_input_title,
+                his_input_body,
+                pred_input_title,
+                pred_input_body
+            ],
+            preds,
+        )
+
+        scorer = keras.Model(
+            [
+                his_input_title,
+                his_input_body,
+                pred_input_title_one,
+                pred_input_body_one
+            ],
+            pred_one,
+        )
+
         return model, scorer
