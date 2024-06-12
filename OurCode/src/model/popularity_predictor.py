@@ -24,22 +24,20 @@ from torch import nn
 
 @dataclass
 class TANPPConfig:
-    size_n: int
-
-    # Its said in section 4.1 the recency embedding size they used is 100
-    size_r: int
-
-    # In their code this is 1500 I think
-    # check `time_embedding_layer` in `Encoders.create_pe_model`
-    max_recency: int
+    recency_embedding_config: "REConfig"
+    recency_based_popularity_dense_config: "RBPDConfig"
+    content_based_popularity_dense_config: "CBPDConfig"
+    content_recency_gate_config: "CRGConfig"
 
 
 class TimeAwareNewsPopularityPredictor(nn.Module):
 
-    def __init__(self, config: TANPPConfig):
+    def __init__(self, size_n: int, config: TANPPConfig):
         super().__init__()
 
         self.config = config
+        self.size_n = size_n
+        self.r_size = config.recency_embedding_config.r_size
 
         self.wp = nn.Parameter(torch.rand(1))
 
@@ -49,16 +47,18 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         self.wc = nn.Parameter(torch.rand(1))
 
         self.recency_embedding = RecencyEmbedding(
-            REConfig(r_size=config.size_r, max_recency=config.max_recency)
+            config=config.recency_embedding_config
         )
         self.recency_based_popularity_dense = RecencyBasedPopularityDense(
-            RBPDConfig(r_size=config.size_r)
+            config=config.recency_based_popularity_dense_config, r_size=self.r_size
         )
         self.content_based_popularity_dense = ContentBasedPopularityDense(
-            CBPDConfig(n_size=config.size_n)
+            config=config.content_based_popularity_dense_config, n_size=size_n
         )
         self.content_recency_gate = ContentRecencyGate(
-            CRGConfig(r_size=config.size_r, n_size=config.size_n)
+            config=config.content_recency_gate_config,
+            r_size=self.r_size,
+            n_size=size_n,
         )
 
     def forward(
@@ -90,13 +90,13 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
         batch_size, n_size = n.size()
         assert recencies.size(0) == batch_size
-        assert n_size == self.config.size_n
+        assert n_size == self.size_n
         assert crt.max() <= 1.0 and crt.min() >= 0.0
         assert crt.dtype == torch.float32 or crt.dtype == torch.float64
 
         r = self.recency_embedding(recencies)  # (batch_size, r_size)
         assert len(r.size()) == 2
-        assert r.size(1) == self.config.size_r
+        assert r.size(1) == self.size_r
         assert r.size(0) == batch_size
 
         pr = self.recency_based_popularity_dense(r)  # (batch_size)
@@ -126,6 +126,8 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
 @dataclass
 class REConfig:
+
+    # They use 100 in their code and in the paper they say they use 100
     r_size: int
 
     # In their code this is 1500 I think
@@ -180,7 +182,7 @@ class RecencyEmbedding(nn.Module):
 
 @dataclass
 class RBPDConfig:
-    r_size: int
+    pass
 
 
 class RecencyBasedPopularityDense(nn.Module):
@@ -196,11 +198,12 @@ class RecencyBasedPopularityDense(nn.Module):
 
     """
 
-    def __init__(self, config: RBPDConfig):
+    def __init__(self, r_size: int, config: RBPDConfig):
         super().__init__()
 
         self.config = config
-        self.dense = nn.Linear(config.r_size, 1)
+        self.r_size = r_size
+        self.dense = nn.Linear(r_size, 1)
 
     def forward(self, r: torch.Tensor) -> torch.Tensor:
         r"""
@@ -213,15 +216,20 @@ class RecencyBasedPopularityDense(nn.Module):
 
         """
 
-        assert r.size(1) == self.config.r_size
+        assert len(r.size()) == 2
+        batch_size, r_size = r.size()
+        assert r_size == self.r_size
 
-        pr = self.dense(r)
+        pr = self.dense(r)  # (batch_size)
+        assert len(pr.size()) == 1
+        assert pr.size(0) == batch_size
+
         return pr
 
 
 @dataclass
 class CBPDConfig:
-    n_size: int
+    pass
 
 
 class ContentBasedPopularityDense(nn.Module):
@@ -237,11 +245,13 @@ class ContentBasedPopularityDense(nn.Module):
 
     """
 
-    def __init__(self, config: CBPDConfig):
+    def __init__(self, n_size: int, config: CBPDConfig):
         super().__init__()
 
         self.config = config
-        self.dense = nn.Linear(config.n_size, 1)
+        self.n_size = n_size
+
+        self.dense = nn.Linear(n_size, 1)
 
     def forward(self, n: torch.Tensor) -> torch.Tensor:
         r"""
@@ -254,16 +264,20 @@ class ContentBasedPopularityDense(nn.Module):
 
         """
 
-        assert n.size(1) == self.config.n_size
+        assert len(n.size()) == 2
+        batch_size, n_size = n.size()
+        assert n_size == self.n_size
 
-        pc = self.dense(n)
+        pc = self.dense(n)  # (batch_size)
+        assert len(pc.size()) == 1
+        assert pc.size(0) == batch_size
+
         return pc
 
 
 @dataclass
 class CRGConfig:
-    r_size: int
-    n_size: int
+    pass
 
 
 class ContentRecencyGate(nn.Module):
@@ -284,13 +298,15 @@ class ContentRecencyGate(nn.Module):
 
     """
 
-    def __init__(self, config: CRGConfig):
+    def __init__(self, r_size: int, n_size: int, config: CRGConfig):
         super().__init__()
 
         self.config = config
+        self.r_size = r_size
+        self.n_size = n_size
 
         # assumption: Wp is a vector, and bp is a scalar, check class docstring
-        self.Wp = nn.Parameter(torch.rand(config.r_size + config.n_size))
+        self.Wp = nn.Parameter(torch.rand(r_size + n_size))
         self.bp = nn.Parameter(torch.rand(1))
 
     def forward(self, r: torch.Tensor, n: torch.Tensor) -> torch.Tensor:
@@ -311,11 +327,11 @@ class ContentRecencyGate(nn.Module):
 
         """
 
-        assert r.size(1) == self.config.r_size
-        assert n.size(1) == self.config.n_size
+        assert r.size(1) == self.r_size
+        assert n.size(1) == self.n_size
 
         rn = torch.cat([r, n], dim=1)  # (batch_size, r_size + n_size)
-        assert rn.size(1) == self.config.r_size + self.config.n_size
+        assert rn.size(1) == self.r_size + self.n_size
 
         Wp_rn = torch.matmul(rn, self.Wp)  # (batch_size)
         assert len(Wp_rn.size()) == 1

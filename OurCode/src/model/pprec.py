@@ -8,6 +8,7 @@ from .popularity_predictor import TimeAwareNewsPopularityPredictor, TANPPConfig
 from .user_encoder import PopularityAwareUserEncoder, PAUEConfig
 
 
+@dataclass
 class PPRConfig:
     user_news_encoder_config: NEConfig
     popularity_news_encoder_config: NEConfig
@@ -17,42 +18,53 @@ class PPRConfig:
 
 
 class PPRec(nn.Module):
-    def __init__(self, config: PPRConfig):
+    """
+
+    Implementation of PPRec. Figure 2 in the paper shows the architecture.
+    Outputs a ranking score for some candidate news articles.
+
+    """
+
+    def __init__(
+        self,
+        # The maximum articles a user has clicked on in the past.
+        # Depends on the dataloader used.
+        max_clicked: int,
+        config: PPRConfig,
+    ):
 
         super().__init__()
 
-        # output of the user encoder (user embeddings u) should equal the size the
-        # aggregator gate expects.
-        assert (
-            config.user_encoder_config.get_size_u()
-            == config.aggregator_gate_config.size_u
-        )
-
-        # output of the user news encoder (news_embeddings n) should equal the size
-        # that the user encoder expects.
-        assert (
-            config.user_news_encoder_config.get_size_n()
-            == config.user_encoder_config.size_n
-        )
-
-        # output of the popularity news encoder (news_embeddings n) should equal the size
-        # that the popularity predictor expects.
-        assert (
-            config.popularity_news_encoder_config.get_size_n()
-            == config.popularity_predictor_config.size_n
-        )
-
         self.config = config
+        self.popularity_size_n = config.popularity_news_encoder_config.get_size_n()
+        self.user_size_n = config.user_news_encoder_config.get_size_n()
+        self.max_clicked = max_clicked
 
-        user_news_encoder = ContentAwareNewsEncoder(config.user_news_encoder_config)
-        popularity_news_encoder = ContentAwareNewsEncoder(
+        self.user_news_encoder = ContentAwareNewsEncoder(
+            config.user_news_encoder_config
+        )
+        self.popularity_news_encoder = ContentAwareNewsEncoder(
             config.popularity_news_encoder_config
         )
-        popularity_predictor = TimeAwareNewsPopularityPredictor(
-            config.popularity_predictor_config
+        self.popularity_predictor = TimeAwareNewsPopularityPredictor(
+            config=config.popularity_predictor_config, size_n=self.popularity_size_n
         )
-        user_encoder = PopularityAwareUserEncoder(config.user_encoder_config)
-        aggregator_gate = PersonalizedAggregatorGate(config.aggregator_gate_config)
+        self.user_encoder = PopularityAwareUserEncoder(
+            config=config.user_encoder_config,
+            size_n=self.user_size_n,
+            max_clicked=max_clicked,
+        )
+        self.aggregator_gate = PersonalizedAggregatorGate(config.aggregator_gate_config)
+
+    def forward(self):
+        """
+
+        Returns the ranking scores for a batch of candidate news articles, given the user's
+        past click history.
+
+        """
+
+        raise NotImplementedError()
 
 
 @dataclass
