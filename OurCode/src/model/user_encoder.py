@@ -26,7 +26,10 @@ from .news_encoder import NEConfig
 @dataclass
 class PAUEConfig:
     # Its said in section 4.1 the popularity embedding size they used is 100
-    p_size: int
+    size_p: int
+
+    # The authors use 400. Since their news encoder has 20 heads with 20 dimensions
+    size_n: int
 
     # And also in section 4.1: 20 heads with 20 dimensions output per head
     n_attention_heads: int
@@ -34,12 +37,28 @@ class PAUEConfig:
 
     # This is configurable in their code
     # First line of `create_pe_model`
-    # Q: How are the cased handled when a user has less clicked than 
-    # the max_clicked? 
     max_clicked: int
 
-    def m_size(self) -> int:
+    # In their code this 200 I think
+    # check `popularity_embedding_layer` in `Encoders.create_pe_model`
+    # Context: for the user encoder, their ctr needs to be an integer,
+    # so it can be used in the Embedding layer (they call it popularity
+    # embdding in the paper). They scale the ctr from 0 to 200. So to be
+    # clear, this ctr is not the absolute number of clicks. Its still the
+    # click through rate, the number of clicks divided by the number of
+    # impressions. They just scale and rount it to be an integer between
+    # 0 and 200.
+    max_ctr: int
+
+    def get_size_m(self) -> int:
         return self.n_attention_heads * self.head_output_size
+
+    def get_size_u(self) -> int:
+
+        # The size of the user interest embeddings u is the same as the size of the
+        # contextual news representations m, since its a scaled and summed version of
+        # it.
+        return self.get_size_m()
 
 
 class PopularityAwareUserEncoder(nn.Module):
@@ -52,6 +71,13 @@ class PEConfig:
 
     # In their code this 200 I think
     # check `popularity_embedding_layer` in `Encoders.create_pe_model`
+    # Context: for the user encoder, their ctr needs to be an integer,
+    # so it can be used in the Embedding layer (they call it popularity
+    # embdding in the paper). They scale the ctr from 0 to 200. So to be
+    # clear, this ctr is not the absolute number of clicks. Its still the
+    # click through rate, the number of clicks divided by the number of
+    # impressions. They just scale and rount it to be an integer between
+    # 0 and 200.
     max_ctr: int
 
     # This is configurable in their code
@@ -94,10 +120,11 @@ class PopularityEmbedding(nn.Module):
 
         ctr is a tensor of shape (batch_size, max_clicked), where max_clicked is the max
         number of clicked articles by the user. The values in ctr are the click through
-        rates of the articles, so they are integers. I thought at first the ctr
-        would be some kind of division between clicks and impressions, but it seems
-        like its just the number of clicks in some period? Got this from looking at
-        their code. They must be integers to be used in this kind of embedding layer.
+        rates of the articles. A value between 0 and 1. The number of impressions divided
+        by the number of clicks. For this module, they need to be integers between 0 and max_ctr.
+        The authors already do this in the dataloader, but to me it seems its better practice
+        to do it here, so it doesnt get confusing why the ctr is an int between 0 and max_ctr
+        all of a sudden.
 
         p is a vector of shape (batch_size, max_clicked, popularity_embedding_size)
 
@@ -106,11 +133,11 @@ class PopularityEmbedding(nn.Module):
         assert len(ctr.size()) == 2
         batch_size, max_clicked = ctr.size()
         assert max_clicked == self.config.max_clicked
-        assert ctr.dtype == torch.int64 or ctr.dtype == torch.int32
+        assert ctr.dtype == torch.float32 or ctr.dtype == torch.float64
+        assert ctr.max() <= 1.0 and ctr.min() >= 0.0
 
-        # The embedding layer has a specific max value, so we have to clip the ctr I think?
-        # I feel like this is handled differently though.
-        ctr_clipped = torch.clamp(ctr, 0, self.config.max_ctr - 1)
+        # Here we scale the ctr to be between 0 and max_ctr
+        ctr_clipped = torch.mul(ctr, self.config.max_ctr).long()
 
         p = self.embedding(ctr_clipped)  # (batch_size, max_clicked, p_size)
         assert p.size(0) == batch_size

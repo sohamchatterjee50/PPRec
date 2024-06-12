@@ -24,10 +24,10 @@ from torch import nn
 
 @dataclass
 class TANPPConfig:
-    n_size: int
+    size_n: int
 
     # Its said in section 4.1 the recency embedding size they used is 100
-    r_size: int
+    size_r: int
 
     # In their code this is 1500 I think
     # check `time_embedding_layer` in `Encoders.create_pe_model`
@@ -41,20 +41,24 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
         self.config = config
 
-        self.wc = nn.Parameter(torch.rand(1))
         self.wp = nn.Parameter(torch.rand(1))
 
+        # In the paper they specify this weigth for the ctr, but in their code
+        # they dont use it at all. I suspect because it doensnt add expressability
+        # to the model. Check the comment on their code. So what do we do?
+        self.wc = nn.Parameter(torch.rand(1))
+
         self.recency_embedding = RecencyEmbedding(
-            REConfig(r_size=config.r_size, max_recency=config.max_recency)
+            REConfig(r_size=config.size_r, max_recency=config.max_recency)
         )
         self.recency_based_popularity_dense = RecencyBasedPopularityDense(
-            RBPDConfig(r_size=config.r_size)
+            RBPDConfig(r_size=config.size_r)
         )
         self.content_based_popularity_dense = ContentBasedPopularityDense(
-            CBPDConfig(n_size=config.n_size)
+            CBPDConfig(n_size=config.size_n)
         )
         self.content_recency_gate = ContentRecencyGate(
-            CRGConfig(r_size=config.r_size, n_size=config.n_size)
+            CRGConfig(r_size=config.size_r, n_size=config.size_n)
         )
 
     def forward(
@@ -71,11 +75,13 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
         recencies is an integer tensor of shape (batch_size) that contains the recencies (the
         hours since the news article was published, to the time of prediction) for each
-        news article in the batch.
+        news article in the batch. In their dataloader, they have divided these hours by two
+        making every recency step a step of two hours. But the idea stays the same. Its
+        correlated with the number of hours.
 
         crt is a tensor of shape (batch_size) that contains the click through rates for
-        each news article in the batch. Its a float this time, not an integer like in the
-        user encoder. So a value between 0 and 1.
+        each news article in the batch. So a value between 0 and 1, the number of clicks
+        divided by the number of impressions.
 
         sp is a tensor of shape (batch_size) that contains the popularity scores for
         each news article in the batch.
@@ -84,13 +90,13 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
         batch_size, n_size = n.size()
         assert recencies.size(0) == batch_size
-        assert n_size == self.config.n_size
+        assert n_size == self.config.size_n
         assert crt.max() <= 1.0 and crt.min() >= 0.0
         assert crt.dtype == torch.float32 or crt.dtype == torch.float64
 
         r = self.recency_embedding(recencies)  # (batch_size, r_size)
         assert len(r.size()) == 2
-        assert r.size(1) == self.config.r_size
+        assert r.size(1) == self.config.size_r
         assert r.size(0) == batch_size
 
         pr = self.recency_based_popularity_dense(r)  # (batch_size)
@@ -109,6 +115,8 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         assert len(p.size()) == 1
         assert p.size(0) == batch_size
 
+        # In their code this would just be `sp = crt + self.wp * p`
+        # they leave out the second parameter weight.
         sp = self.wc * crt + self.wp * p  # (batch_size)
         assert len(sp.size()) == 1
         assert sp.size(0) == batch_size
@@ -149,7 +157,9 @@ class RecencyEmbedding(nn.Module):
         recency is a tensor of shape (batch_size) that contains the recencies (the
         hours since the news article was published, to the time of prediction) for
         each news article in the batch. These are rounded to the nearest hour, so
-        an integer.
+        an integer. In their dataloader, they have divided these hours by two making
+        every recency step a step of two hours. But the idea stays the same. Its
+        correlated with the number of hours.
 
         """
 
@@ -180,8 +190,9 @@ class RecencyBasedPopularityDense(nn.Module):
     but the one used to caluculate the recency based popularity $\hat{p}_r$
     based on the recency embedding r.
 
-    This one just has one layer, but looking at their code they use a 2-layer
-    network: 400 -> 256 -> 1. But not sure, the Keras code is unreadable.
+    This one just has one layer, but looking at their code they use more layers.
+    And they don't use the number of layers and hidden units they specify in
+    the paper hahah. Lets look at what we'll be using later.
 
     """
 
@@ -220,8 +231,9 @@ class ContentBasedPopularityDense(nn.Module):
     but the one used to caluculate the content based popularity $\hat{p}_c$
     based on the news embedding n.
 
-    This one just has one layer, but looking at their code they use a 2-layer
-    network: 400 -> 256 -> 1. But unsure as well.
+    This one just has one layer, but looking at their code they use more
+    layers. And they don't use the number of layers and hidden units they
+    specify in the paper hahah. Lets look at what we'll be using later.
 
     """
 
@@ -262,9 +274,13 @@ class ContentRecencyGate(nn.Module):
     recency based popularity $\hat{p}_r$ is more important, in to calculate the
     final popularity score $\hat{p}$.
 
-    Q: In the paper Wp is mentioned as a vector, and bp as a vector. But that
+    Q: In the paper Wp is mentioned as a matrix, and bp as a vector. But that
     does not make sense to me, since theta is a scalar? So I assume that Wp is
-    a vector, and bp is a scalar. Should als Songga. Or should we add the
+    a vector, and bp is a scalar.
+
+    A: Found the answer in their code. Wp is a vector, and bp is a scalar. And
+    instead of just a single linear transformation, they use a 2-layer network
+    hahaha. Why are they so inconsistent with the paper?
 
     """
 

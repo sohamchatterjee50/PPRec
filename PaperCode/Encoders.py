@@ -581,7 +581,8 @@ def create_pe_model(
     # of clicks over the number of impressions. So therefore I feel
     # like this is just the ctr as a precentage, but scaled to the range
     # of 0-200. Since the popularity embedding layer they use has a vocab
-    # size of 200. Maybe the answer is in the input data loading.
+    # size of 200. I checked their data loader, and yes, its the ctr scaled
+    # to 0-200.
     clicked_ctr = Input(shape=(max_clicked_news,), dtype="int32")
     print(clicked_input.shape)
 
@@ -676,9 +677,8 @@ def create_pe_model(
 
     # Pepijn: The click through rate of the candidate articles. This time the crt is a float, so
     # probably the actual click through rate. So the number of clicks over the number of
-    # impressions. So not scaled to a range, like for the user encoder! (If I'm correct
-    # about the user encoder, could also be that they use the absolute number of clicks in
-    # that case). So this is the crt input to our TimeAwarePopularityPredictor in
+    # impressions. So not scaled to a range, like for the user encoder!
+    #  So this is the crt input to our TimeAwarePopularityPredictor in
     # popularity_predictor.py. Again, note the npratio to facilitate one positive and some
     # negative examples.
     candidates_ctr = keras.Input((1 + config["npratio"],), dtype="float32")
@@ -686,7 +686,17 @@ def create_pe_model(
     # Pepijn: The recencies of the candidate articles. So the time since the article was published,
     # in hours, rounded, I think. The `recencies`` input to our TimeAwarePopularityPredictor in
     # popularity_predictor.py. Again, note the npratio to facilitate one positive and
-    # some negative examples.
+    # some negative examples. Ok, I just checked the data loader, and the recency is the
+    # not the actual number of hours since the article was published. They use some function
+    # compute_Q_publish to compute the final recency value, but what this function does is
+    # `time_since_publishing // 2`. So the recency is the number of hours since the article
+    # was published, but divided by two (and rounded). Its seems like this is a simple trick to
+    # get it into the range of the Embedding layer `time_embedding_layer` you can find some lines
+    # below. There probably is no data clipping needed, as the recency/2 is always less than 1500.
+    # Or they checked manually and found 1500 was the maximum recency. But its probably not exactly
+    # 1500, but something a little less, making this embedding layer not as powerfull as it can be,
+    # as theres some unused slots this way. Think we can do better that just dividing by two choosing
+    # finding the value needed for the input dimensions of the recency embedding layer.
     candidates_rece_emb_index = keras.Input((1 + config["npratio"],), dtype="int32")
 
     # Pepijn: Config to create w/o news recency in figure 10 in the paper. First the
@@ -844,7 +854,8 @@ def create_pe_model(
     # is not used in the model, as this `user_activity_input` thing you see here is not linked
     # to any outputs of the model, so its not used anywhere. The author was probably planning
     # to also use it, or was just too lazy to remove it from the train generator. In other words,
-    # just ignore this line.
+    # just ignore this line. If you look into the train generator, you see that the `activity`
+    # is just the total number of clicks for the user. But yeah its not used anywhere.
     user_activity_input = keras.layers.Input((1,), dtype="int32")
 
     # Pepijn: This network here is used in the personalized aggregator gate they talk about in
@@ -954,8 +965,8 @@ def create_pe_model(
     )
 
     # Pepijn: This finds all computation steps in the model to map all the inputs we defined to outputs.
-    # I the loss function in their paper can be rewritten as a categorical crossentropy loss, with two 
-    # classes, the positive and negative article. But yeah bit weird. 
+    # I the loss function in their paper can be rewritten as a categorical crossentropy loss, with two
+    # classes, the positive and negative article. But yeah bit weird.
     model.compile(
         loss=["categorical_crossentropy"], optimizer=Adam(lr=0.0001), metrics=["acc"]
     )
