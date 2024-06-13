@@ -4,15 +4,7 @@ This module contains the implementations for the Time-Aware News Popularity Pred
 described in Qi et al. (2021) in section 3.3, and visualized in figure 4.
 
 The only module that is not available in this code, but is shown in the figure, is
-the news encoder. This is implemented in news_encoder.py. My question here would be,
-just like in for the Popularity Aware User Encoder file, do we share weights
-between the News Encoder used in the user encoder? At least if the news encoder in 
-figure 4 is the one shown in figure 3.
-
-Q: Is the News Encoder module in figure 5 the same as the one shown in figure 3?
-
-Q: Do we share the weights between the news encoder used in the user encoder,
-and the one used in the popularity predictor?
+the news encoder. This is implemented in news_encoder.py. 
 
 """
 
