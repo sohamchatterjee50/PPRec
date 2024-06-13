@@ -3,9 +3,9 @@
 from tensorflow.keras import layers
 import tensorflow.keras as keras
 import numpy as np
-
+import tensorflow as tf
 from ebrec.models.newsrec.base_model import BaseModel
-from ebrec.models.newsrec.layers import AttLayer2
+from ebrec.models.newsrec.layers import AttLayer2,SelfAttention
 
 __all__ = ["PPRecModel"]
 
@@ -48,17 +48,17 @@ class PPRecModel(BaseModel):
         )
 
     def _build_graph(self):
-        """Build NAML model and scorer.
+        """Build PPRec model and scorer.
 
         Returns:
             object: a model used to train.
             object: a model used to evaluate and inference.
         """
 
-        model, scorer = self._build_naml()
+        model, scorer = self._build_pprec()
         return model, scorer
 
-    def _build_userencoder(self, newsencoder):
+    def _build_userencoder(self, newsencoder,pop_embed):
         """The main function to create user encoder of NAML.
 
         Args:
@@ -70,13 +70,17 @@ class PPRecModel(BaseModel):
         his_input_title_body_verts = keras.Input(
             shape=(
                 self.hparams.history_size,
-                self.hparams.title_size + self.hparams.body_size ,
+                self.hparams.title_size + self.hparams.body_size +1,
             ),
             dtype="int32",
         )
 
         click_news_presents = layers.TimeDistributed(newsencoder)(
             his_input_title_body_verts
+        )
+        
+        click_news_presents = SelfAttention(self.hparams.head_num, self.hparams.head_dim, seed=self.seed)(
+            [click_news_presents] * 3
         )
         user_present = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(
             click_news_presents
@@ -98,7 +102,7 @@ class PPRecModel(BaseModel):
             object: the news encoder of NAML.
         """
         input_title_body_verts = keras.Input(
-            shape=(self.hparams.title_size + self.hparams.body_size), dtype="int32"
+            shape=(self.hparams.title_size + self.hparams.body_size +1), dtype="int32"
         )
 
         sequences_input_title = layers.Lambda(
@@ -111,10 +115,20 @@ class PPRecModel(BaseModel):
                 + self.hparams.body_size,
             ]
         )(input_title_body_verts)
+        input_vert = layers.Lambda(
+            lambda x: x[
+                :,
+                self.hparams.title_size
+                + self.hparams.body_size : self.hparams.title_size
+                + self.hparams.body_size
+                + 1,
+            ]
+        )(input_title_body_verts)
         
 
-        title_repr = self._build_titleencoder(embedding_layer)(sequences_input_title)
-        body_repr = self._build_bodyencoder(embedding_layer)(sequences_input_body)
+        title_repr = self._build_titleencoder(embedding_layer,sequences_input_body)(sequences_input_title)
+        body_repr = self._build_bodyencoder(embedding_layer,sequences_input_title)(sequences_input_body)
+        pop_repr = self._build_popencoder()(input_vert)
        
         concate_repr = layers.Concatenate(axis=-2)(
             [title_repr, body_repr]
@@ -124,9 +138,10 @@ class PPRecModel(BaseModel):
         )
 
         model = keras.Model(input_title_body_verts, news_repr, name="news_encoder")
-        return model
+        
+        return model,pop_repr
 
-    def _build_titleencoder(self, embedding_layer):
+    def _build_titleencoder(self, embedding_layer,sequences_input_body):
         """build title encoder of NAML news encoder.
 
         Args:
@@ -150,14 +165,20 @@ class PPRecModel(BaseModel):
             bias_initializer=keras.initializers.Zeros(),
             kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
         )(y)
+        y = SelfAttention(self.hparams.head_num, self.hparams.head_dim, seed=self.seed)(
+            [y] * 3
+        )
+        
         y = layers.Dropout(self.hparams.dropout)(y)
         pred_title = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(y)
         pred_title = layers.Reshape((1, self.hparams.filter_num))(pred_title)
 
         model = keras.Model(sequences_input_title, pred_title, name="title_encoder")
         return model
+    
+    
 
-    def _build_bodyencoder(self, embedding_layer):
+    def _build_bodyencoder(self, embedding_layer,sequences_input_title):
         """build body encoder of NAML news encoder.
 
         Args:
@@ -181,6 +202,10 @@ class PPRecModel(BaseModel):
             bias_initializer=keras.initializers.Zeros(),
             kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
         )(y)
+        y = SelfAttention(self.hparams.head_num, self.hparams.head_dim, seed=self.seed)(
+            [y] * 3
+        )
+        
         y = layers.Dropout(self.hparams.dropout)(y)
         pred_body = AttLayer2(self.hparams.attention_hidden_dim, seed=self.seed)(y)
         pred_body = layers.Reshape((1, self.hparams.filter_num))(pred_body)
@@ -188,7 +213,7 @@ class PPRecModel(BaseModel):
         model = keras.Model(sequences_input_body, pred_body, name="body_encoder")
         return model
 
-    def _build_vertencoder(self):
+    def _build_popencoder(self):
         """build vert encoder of NAML news encoder.
 
         Return:
@@ -209,35 +234,35 @@ class PPRecModel(BaseModel):
         )(vert_emb)
         pred_vert = layers.Reshape((1, self.hparams.filter_num))(pred_vert)
 
-        model = keras.Model(input_vert, pred_vert, name="vert_encoder")
+        model = keras.Model(input_vert, pred_vert, name="pop_encoder")
         return model
 
-    def _build_subvertencoder(self):
-        """build subvert encoder of NAML news encoder.
+    # def _build_subvertencoder(self):
+    #     """build subvert encoder of NAML news encoder.
 
-        Return:
-            object: the subvert encoder of NAML.
-        """
+    #     Return:
+    #         object: the subvert encoder of NAML.
+    #     """
 
-        input_subvert = keras.Input(shape=(1,), dtype="int32")
+    #     input_subvert = keras.Input(shape=(1,), dtype="int32")
 
-        subvert_embedding = layers.Embedding(
-            self.hparams.subvert_num, self.hparams.subvert_emb_dim, trainable=True
-        )
+    #     subvert_embedding = layers.Embedding(
+    #         self.hparams.subvert_num, self.hparams.subvert_emb_dim, trainable=True
+    #     )
 
-        subvert_emb = subvert_embedding(input_subvert)
-        pred_subvert = layers.Dense(
-            self.hparams.filter_num,
-            activation=self.hparams.dense_activation,
-            bias_initializer=keras.initializers.Zeros(),
-            kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
-        )(subvert_emb)
-        pred_subvert = layers.Reshape((1, self.hparams.filter_num))(pred_subvert)
+    #     subvert_emb = subvert_embedding(input_subvert)
+    #     pred_subvert = layers.Dense(
+    #         self.hparams.filter_num,
+    #         activation=self.hparams.dense_activation,
+    #         bias_initializer=keras.initializers.Zeros(),
+    #         kernel_initializer=keras.initializers.glorot_uniform(seed=self.seed),
+    #     )(subvert_emb)
+    #     pred_subvert = layers.Reshape((1, self.hparams.filter_num))(pred_subvert)
 
-        model = keras.Model(input_subvert, pred_subvert, name="subvert_encoder")
-        return model
+    #     model = keras.Model(input_subvert, pred_subvert, name="subvert_encoder")
+    #     return model
 
-    def _build_naml(self):
+    def _build_pprec(self):
         """The main function to create NAML's logic. The core of NAML
         is a user encoder and a news encoder.
 
@@ -252,6 +277,9 @@ class PPRecModel(BaseModel):
         his_input_body = keras.Input(
             shape=(self.hparams.history_size, self.hparams.body_size), dtype="int32"
         )
+        his_input_pop = keras.Input(
+            shape=(self.hparams.history_size, 1), dtype="int32"
+        )
       
 
         pred_input_title = keras.Input(
@@ -264,7 +292,8 @@ class PPRecModel(BaseModel):
             shape=(None, self.hparams.body_size),
             dtype="int32",
         )
-       
+        pred_input_pop = keras.Input(shape=(None, 1), dtype="int32")
+        
         
         pred_input_title_one = keras.Input(
             shape=(
@@ -280,36 +309,38 @@ class PPRecModel(BaseModel):
             ),
             dtype="int32",
         )
-        
+        pred_input_pop_one = keras.Input(shape=(1, 1), dtype="int32")
         
         
         his_title_body_verts = layers.Concatenate(axis=-1)(
-            [his_input_title, his_input_body]
+            [his_input_title, his_input_body, his_input_pop ]
         )
 
         pred_title_body_verts = layers.Concatenate(axis=-1)(
-            [pred_input_title, pred_input_body]
+            [pred_input_title, pred_input_body, pred_input_pop ]
         )
 
         pred_title_body_verts_one = layers.Concatenate(axis=-1)(
             [
                 pred_input_title_one,
                 pred_input_body_one,
-               
+               pred_input_pop_one
             ]
         )
+        
         pred_title_body_verts_one = layers.Reshape((-1,))(pred_title_body_verts_one)
-
+       
         embedding_layer = layers.Embedding(
             self.word2vec_embedding.shape[0],
             self.word2vec_embedding.shape[1],
             weights=[self.word2vec_embedding],
             trainable=True,
         )
-
-        self.newsencoder = self._build_newsencoder(embedding_layer)
-        self.userencoder = self._build_userencoder(self.newsencoder)
-
+        
+        self.newsencoder,pop_embed = self._build_newsencoder(embedding_layer)
+        
+        self.userencoder = self._build_userencoder(self.newsencoder,pop_embed)
+        
         user_present = self.userencoder(his_title_body_verts)
         news_present = layers.TimeDistributed(self.newsencoder)(pred_title_body_verts)
         news_present_one = self.newsencoder(pred_title_body_verts_one)
@@ -324,8 +355,10 @@ class PPRecModel(BaseModel):
             [
                 his_input_title,
                 his_input_body,
+                his_input_pop,
                 pred_input_title,
-                pred_input_body
+                pred_input_body,
+                pred_input_pop
             ],
             preds,
         )
@@ -334,8 +367,10 @@ class PPRecModel(BaseModel):
             [
                 his_input_title,
                 his_input_body,
+                his_input_pop,
                 pred_input_title_one,
-                pred_input_body_one
+                pred_input_body_one,
+                pred_input_pop_one
             ],
             pred_one,
         )

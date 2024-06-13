@@ -123,12 +123,14 @@ class PPRecDataLoader(NewsrecDataLoader):
     # unknown_category_value: int = 0
     # unknown_subcategory_value: int = 0
     body_mapping: dict[int, list[int]] = None
+    popularity_mapping: dict[int, int]= None
     # category_mapping: dict[int, int] = None
     # subcategory_mapping: dict[int, int] = None
 
     def __post_init__(self):
         self.title_prefix = "title_"
         self.body_prefix = "ner_clusters_text_"
+        self.popularity_prefix = 'views_'
         # self.category_prefix = "category_"
         # self.subcategory_prefix = "subcategory_"
         (
@@ -139,6 +141,7 @@ class PPRecDataLoader(NewsrecDataLoader):
         )
         # if self.eval_mode:
         #     raise ValueError("'eval_mode = True' is not implemented for NAML")
+        
 
         return super().__post_init__()
 
@@ -174,12 +177,26 @@ class PPRecDataLoader(NewsrecDataLoader):
             fill_nulls=self.unknown_index,
             drop_nulls=False,
         )
+        popularity = df.pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.history_column,
+            mapping=self.popularity_mapping,
+            fill_nulls=0,
+            drop_nulls=False,
+        ).pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.inview_col,
+            mapping=self.popularity_mapping,
+            fill_nulls=0,
+            drop_nulls=False,
+        )
         
       
         return (
             pl.DataFrame()
             .with_columns(title.select(pl.all().name.prefix(self.title_prefix)))
             .with_columns(body.select(pl.all().name.prefix(self.body_prefix)))
+            .with_columns(popularity.select(pl.all().name.prefix(self.popularity_prefix)))
             
         )
 
@@ -193,6 +210,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             print(batch_X.columns)
             repeats_title = np.array(batch_X["title_n_samples"])
             repeats_body = np.array(batch_X["ner_clusters_text_n_samples"])
+            repeats_pop = np.array(batch_X["views_n_samples"])
             # =>
             batch_y = np.array(batch_y.explode().to_list()).reshape(-1, 1)
             # =>
@@ -218,6 +236,16 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_body = self.lookup_article_matrix[
                 batch_X[self.body_prefix + self.inview_col].explode().to_list()
             ]
+
+            his_input_pop = repeat_by_list_values_from_matrix(
+                batch_X[self.popularity_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix,
+                repeats=repeats_pop,
+            )
+            # =>
+            pred_input_pop = self.lookup_article_matrix[
+                batch_X[self.popularity_prefix + self.inview_col].explode().to_list()
+            ]
            
             his_input_title = np.squeeze(
                 his_input_title, axis=2
@@ -226,6 +254,10 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_body = np.squeeze(
                     his_input_body, axis=2
                     )
+            his_input_pop = np.squeeze(
+                    his_input_pop, axis=2
+                    )
+            
             
 
         else:
@@ -237,12 +269,18 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_body = np.array(
                 batch_X[self.body_prefix + self.history_column].to_list()
             )
+            his_input_pop = np.array(
+                batch_X[self.popularity_prefix + self.history_column].to_list()
+            )
             
             pred_input_title = np.array(
                 batch_X[self.title_prefix + self.inview_col].to_list()
             )
             pred_input_body = np.array(
                 batch_X[self.body_prefix + self.inview_col].to_list()
+            )
+            pred_input_pop = np.array(
+                batch_X[self.popularity_prefix + self.inview_col].to_list()
             )
             
             
@@ -252,6 +290,9 @@ class PPRecDataLoader(NewsrecDataLoader):
             
             pred_input_body = np.squeeze(
                 self.lookup_article_matrix_body[pred_input_body], axis=2
+            )
+            pred_input_pop = np.squeeze(
+                self.lookup_article_matrix_[pred_input_pop], axis=2
             )
             
            
@@ -263,13 +304,18 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_body = np.squeeze(
                     self.lookup_article_matrix_body[his_input_body], axis=2
                     )
+            his_input_pop = np.squeeze(
+                    self.lookup_article_matrix[his_input_pop], axis=2
+                    )
         
        
         return (
             his_input_title,
             his_input_body,
+            his_input_pop,
             pred_input_title,
-            pred_input_body
+            pred_input_body,
+            pred_input_pop
         ), batch_y
 
 

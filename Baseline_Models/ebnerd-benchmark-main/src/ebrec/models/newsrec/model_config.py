@@ -115,4 +115,6 @@ class hparams_pprec:
     loss: str = "cross_entropy_loss"
     dropout: float = 0.2
     learning_rate: float = 0.0001
+    head_num: int = 20
+    head_dim: int = 20
 
