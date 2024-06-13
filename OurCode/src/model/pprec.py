@@ -1,9 +1,25 @@
+"""
+
+This file contains the implementation of the full PPRec model.
+Using the popularity predictor, the user encoder, and the news 
+encoder.
+
+"""
+
 from dataclasses import dataclass
 
 from torch import nn
 import torch
 
-from .news_encoder import ContentAwareNewsEncoder, NEConfig
+from .news_encoder import (
+    KnowledgeAwareNewsEncoder,
+    ContentAwareNewsEncoder,
+    LookupNewsEncoder,
+    NEConfig,
+    CANEConfig,
+    KANEConfig,
+    LNEConfig,
+)
 from .popularity_predictor import TimeAwareNewsPopularityPredictor, TANPPConfig
 from .user_encoder import PopularityAwareUserEncoder, PAUEConfig
 
@@ -30,6 +46,9 @@ class PPRec(nn.Module):
         # The maximum articles a user has clicked on in the past.
         # Depends on the dataloader used.
         max_clicked: int,
+        # Needed by the lookup news encoder. So it can put its
+        # looked up embeddings on the right device.
+        device: torch.device,
         config: PPRConfig,
     ):
 
@@ -40,12 +59,32 @@ class PPRec(nn.Module):
         self.user_size_n = config.user_news_encoder_config.get_size_n()
         self.max_clicked = max_clicked
 
-        self.user_news_encoder = ContentAwareNewsEncoder(
-            config.user_news_encoder_config
-        )
-        self.popularity_news_encoder = ContentAwareNewsEncoder(
-            config.popularity_news_encoder_config
-        )
+        if isinstance(config.user_news_encoder_config, CANEConfig):
+            self.user_news_encoder = ContentAwareNewsEncoder(
+                config.user_news_encoder_config
+            )
+        elif isinstance(config.user_news_encoder_config, KANEConfig):
+            self.user_news_encoder = KnowledgeAwareNewsEncoder(
+                config.user_news_encoder_config
+            )
+        elif isinstance(config.user_news_encoder_config, LNEConfig):
+            self.user_news_encoder = LookupNewsEncoder(
+                config=config.user_news_encoder_config, device=device
+            )
+
+        if isinstance(config.popularity_news_encoder_config, CANEConfig):
+            self.popularity_news_encoder = ContentAwareNewsEncoder(
+                config.popularity_news_encoder_config
+            )
+        elif isinstance(config.popularity_news_encoder_config, KANEConfig):
+            self.popularity_news_encoder = KnowledgeAwareNewsEncoder(
+                config.popularity_news_encoder_config
+            )
+        elif isinstance(config.popularity_news_encoder_config, LNEConfig):
+            self.popularity_news_encoder = LookupNewsEncoder(
+                config=config.popularity_news_encoder_config, device=device
+            )
+
         self.popularity_predictor = TimeAwareNewsPopularityPredictor(
             config=config.popularity_predictor_config, size_n=self.popularity_size_n
         )
@@ -54,9 +93,14 @@ class PPRec(nn.Module):
             size_n=self.user_size_n,
             max_clicked=max_clicked,
         )
-        self.aggregator_gate = PersonalizedAggregatorGate(config.aggregator_gate_config)
+        self.aggregator_gate = PersonalizedAggregatorGate(
+            config=config.aggregator_gate_config,
+            size_u=config.user_encoder_config.get_size_u(),
+        )
 
-    def forward(self):
+    def forward(
+        self,
+    ):
         """
 
         Returns the ranking scores for a batch of candidate news articles, given the user's
@@ -69,7 +113,7 @@ class PPRec(nn.Module):
 
 @dataclass
 class PAGConfig:
-    size_u: int
+    pass
 
 
 class PersonalizedAggregatorGate(nn.Module):
@@ -84,12 +128,12 @@ class PersonalizedAggregatorGate(nn.Module):
 
     """
 
-    def __init__(self, config: PAGConfig):
-        super(PersonalizedAggregatorGate, self).__init__()
+    def __init__(self, size_u: int, config: PAGConfig):
+        super().__init__()
 
         self.config = config
 
-        self.linear = nn.Linear(config.size_u, 1)
+        self.linear = nn.Linear(size_u, 1)
 
     def forward(self, u: torch.Tensor) -> torch.Tensor:
         r"""
@@ -105,7 +149,7 @@ class PersonalizedAggregatorGate(nn.Module):
 
         assert len(u.shape) == 2
         batch_size, size_u = u.shape
-        assert size_u == self.config.size_u
+        assert size_u == self.size_u
 
         eta = torch.sigmoid(self.linear(u))  # shape (batch_size, 1)
         assert len(eta.shape) == 2

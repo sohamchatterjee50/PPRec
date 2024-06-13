@@ -4,13 +4,7 @@ This file contains implementations for the Popularity Aware User Encoder,
 described in Qi et al. (2021) in section 3.4, and visualized in figure 5.
 
 The only module thats shown in figure 5, and is not available in this code
-is the news encoder, since its implemented in news_encoder.py. At least I guess
-the News Encoder in figure 5 is the same as the one depicted in figure 3.
-
-Q: Is the News Encoder module in figure 5 the same as the one shown in figure 3?
-
-Q: Do we share the weights between the news encoder used in the user encoder,
-and the one used in the popularity predictor?
+is the news encoder, since its implemented in news_encoder.py. 
 
 """
 

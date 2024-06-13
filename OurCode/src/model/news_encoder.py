@@ -11,6 +11,7 @@ as a starting point. To get something up and running first.
 """
 
 from typing import Literal
+from abc import ABC
 import os
 from dataclasses import dataclass
 
@@ -22,8 +23,30 @@ import numpy as np
 from ..utils import get_data_folder
 
 
+class NEConfig(ABC):
+    """
+
+    All news encoder configurations should inherit from this class.
+    So in the full PPRec module, we can use the same interface for
+    all news encoders, and test them by just changing the configuration.
+
+    For instance, the popularity prdictor needs to know what the size
+    of the news embeddings it can expect, so it can create the correct layers.
+    Same for the user encoder.
+
+    """
+
+    def get_size_n(self) -> int:
+        """
+
+        Returns the size of the news embeddings.
+
+        """
+        raise NotImplementedError()
+
+
 @dataclass
-class NEConfig:
+class KANEConfig(NEConfig):
     # Default values from the paper section 4.1 are 20, 20
     n_attention_heads: int
     head_output_size: int
@@ -76,6 +99,29 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         raise NotImplementedError()
 
 
+@dataclass
+class CANEConfig(NEConfig):
+    # Default values from the paper section 4.1 are 20, 20
+    n_attention_heads: int
+    head_output_size: int
+
+    def get_size_n(self) -> int:
+        """
+
+        Returns the size of the news embeddings.
+
+        This result is a summation of the word and entity representations,
+        which are the output of an attention layer with N heads, and M
+        dimensions output per head (check 4.1). This is concatenated, so
+        results in a N * M dimensional vector.
+
+        The default values are N = 20 and M = 20, so 400.
+
+        """
+
+        return self.n_attention_heads * self.head_output_size
+
+
 class ContentAwareNewsEncoder(nn.Module):
     """
 
@@ -84,7 +130,7 @@ class ContentAwareNewsEncoder(nn.Module):
 
     """
 
-    def __init__(self, config: NEConfig):
+    def __init__(self, config: CANEConfig):
         super().__init__()
 
         self.config = config
@@ -109,6 +155,15 @@ class ContentAwareNewsEncoder(nn.Module):
 TextEncodeModel = Literal["bert", "roberta", "word2vec", "contrastive"]
 
 
+@dataclass
+class LNEConfig(NEConfig):
+    size_n: int
+    model: TextEncodeModel
+
+    def get_size_n(self) -> int:
+        return self.size_n
+
+
 class LookupNewsEncoder(nn.Module):
     """
 
@@ -123,8 +178,7 @@ class LookupNewsEncoder(nn.Module):
 
     def __init__(
         self,
-        model: TextEncodeModel,
-        config: NEConfig,
+        config: LNEConfig,
         device: torch.device,
         data_folder: str | None = None,
     ):
@@ -132,20 +186,21 @@ class LookupNewsEncoder(nn.Module):
 
         data_folder = get_data_folder(data_folder)
 
-        parquet_file_path = _parquet_file_path_from_model(model, data_folder)
+        parquet_file_path = _parquet_file_path_from_model(config.model, data_folder)
 
         self.data = pd.read_parquet(parquet_file_path)
         self.data.set_index("article_id", inplace=True)
 
-        embeddings_column_name = _embeddings_column_name_from_model(model)
+        embeddings_column_name = _embeddings_column_name_from_model(config.model)
         self.data.rename(columns={embeddings_column_name: "embeddings"}, inplace=True)
 
         news_embedding_size = config.get_size_n()
 
-        self.fcout = nn.Linear(_embedding_size_from_model(model), news_embedding_size)
+        self.fcout = nn.Linear(
+            _embedding_size_from_model(config.model), news_embedding_size
+        )
 
         self.config = config
-        self.model = model
         self.device = device
 
     def forward(self, article_ids: list[int]) -> torch.Tensor:
