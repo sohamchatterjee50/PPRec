@@ -1,0 +1,223 @@
+***************************************************************************************************** 
+* WARNING: The 2021 software stack is not available on the 'genoa' partition.
+Please use the 2022 * 
+* software stack. * 
+* * 
+* If you have any question, please contact us via
+http://servicedesk.surfsara.nl. * 
+***************************************************************************************************** 
+Lmod has detected the following error: The following module(s) are unknown:
+"2021_OSSC"
+
+Please check the spelling or version number. Also try "module spider ..."
+It is also possible your cache file is out-of-date; it may help to try:
+  $ module --ignore_cache load "2021_OSSC"
+
+Also make sure that all modulefiles written in TCL start with the string
+#%Module
+
+
+
+============================================================================================== 
+Warning! Mixing Conda and module environments may lead to corruption of the
+user environment. 
+We do not recommend users mixing those two environments unless absolutely
+necessary. Note that 
+SURF does not provide any support for Conda environment.
+For more information, please refer to our software policy page:
+https://servicedesk.surf.nl/wiki/display/WIKI/Software+policy+Snellius#SoftwarepolicySnellius-UseofAnacondaandMinicondaenvironmentsonSnellius 
+
+Remember that many packages have already been installed on the system and can
+be loaded using 
+the 'module load <package__name>' command. If you are uncertain if a package is
+already available 
+on the system, please use 'module avail' or 'module spider' to search for it.
+============================================================================================== 
+2024-06-14 00:56:53.187651: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2024-06-14 00:56:53.396256: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2024-06-14 00:56:53.396321: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2024-06-14 00:56:53.412323: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2024-06-14 00:56:53.457427: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2024-06-14 00:56:55.082359: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/huggingface_hub/file_download.py:1132: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+2024-06-14 00:57:30.923392: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 38373 MB memory:  -> device: 0, name: NVIDIA A100-SXM4-40GB, pci bus id: 0000:ca:00.0, compute capability: 8.0
+2024-06-14 00:57:33.228889: W external/local_xla/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc:504] Can't find libdevice directory ${CUDA_DIR}/nvvm/libdevice. This may result in compilation or runtime failures, if the program we try to run uses routines from libdevice.
+Searched for CUDA in the following directories:
+  ./cuda_sdk_lib
+  /usr/local/cuda-12.2
+  /usr/local/cuda
+  /home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/tensorflow/python/platform/../../../nvidia/cuda_nvcc
+  /home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/tensorflow/python/platform/../../../../nvidia/cuda_nvcc
+  .
+You can choose the search directory by setting xla_gpu_cuda_data_dir in HloModule's DebugOptions.  For most apps, setting the environment variable XLA_FLAGS=--xla_gpu_cuda_data_dir=/path/to/cuda will work.
+2024-06-14 00:57:33.252039: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.252971: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.253020: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.254036: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.254236: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.258095: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.258126: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.258779: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.258977: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.262581: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.262610: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.263218: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.263413: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.267175: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.267205: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.267786: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.267958: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.272541: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.272570: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.273175: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.273360: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.278237: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.278267: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.278847: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.279018: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.284611: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.284640: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.285282: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.285483: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:33.291614: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.291644: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:33.292294: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:33.292476: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+Epoch 1/10
+2024-06-14 00:57:36.377756: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.377802: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.378603: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.378826: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.382896: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.382927: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.383542: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.383730: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.388385: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.388415: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.389014: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.389211: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.394617: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.394646: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.395236: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.395428: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.401661: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.401690: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.402343: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.402527: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.409568: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.409597: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.410239: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.410438: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.418356: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.418385: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.419019: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.419212: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.428146: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.428175: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.428817: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.428996: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:36.438692: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.438720: W external/local_xla/xla/stream_executor/gpu/asm_compiler.cc:110] Couldn't get ptxas version : FAILED_PRECONDITION: Couldn't get ptxas/nvlink version string: INTERNAL: Couldn't invoke ptxas --version
+2024-06-14 00:57:36.439358: I external/local_tsl/tsl/platform/default/subprocess.cc:304] Start cannot spawn child process: No such file or directory
+2024-06-14 00:57:36.439537: W tensorflow/compiler/mlir/tools/kernel_gen/transforms/gpu_kernel_to_blob_pass.cc:191] Failed to compile generated PTX with ptxas. Falling back to compilation by driver.
+2024-06-14 00:57:37.045070: W external/local_xla/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc:542] libdevice is required by this HLO module but was not found at ./libdevice.10.bc
+error: libdevice not found at ./libdevice.10.bc
+2024-06-14 00:57:37.045519: E tensorflow/compiler/mlir/tools/kernel_gen/tf_framework_c_interface.cc:207] INTERNAL: Generating device code failed.
+2024-06-14 00:57:37.046172: W tensorflow/core/framework/op_kernel.cc:1827] UNKNOWN: JIT compilation failed.
+2024-06-14 00:57:37.046936: W tensorflow/core/framework/op_kernel.cc:1827] UNKNOWN: JIT compilation failed.
+Traceback (most recent call last):
+  File "/gpfs/home5/apatra/Rec/contest/ebnerd-benchmark/examples/00_quick_start/nrms_ebnerd.py", line 176, in <module>
+    hist = model.model.fit(
+           ^^^^^^^^^^^^^^^^
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 70, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/tensorflow/python/eager/execute.py", line 53, in quick_execute
+    tensors = pywrap_tfe.TFE_Py_Execute(ctx._handle, device_name, op_name,
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tensorflow.python.framework.errors_impl.UnknownError: Graph execution error:
+
+Detected at node model/time_distributed_1/news_encoder/att_layer2/Exp defined at (most recent call last):
+  File "/gpfs/home5/apatra/Rec/contest/ebnerd-benchmark/examples/00_quick_start/nrms_ebnerd.py", line 176, in <module>
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 1807, in fit
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 1401, in train_function
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 1384, in step_function
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 1373, in run_step
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 1150, in train_step
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 590, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/base_layer.py", line 1149, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 96, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/functional.py", line 515, in call
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/functional.py", line 672, in _run_internal_graph
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/base_layer.py", line 1149, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 96, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/layers/rnn/time_distributed.py", line 246, in call
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/training.py", line 590, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/base_layer.py", line 1149, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 96, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/functional.py", line 515, in call
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/functional.py", line 672, in _run_internal_graph
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 65, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/engine/base_layer.py", line 1149, in __call__
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/utils/traceback_utils.py", line 96, in error_handler
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/ebrec/models/newsrec/layers.py", line 70, in call
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/ebrec/models/newsrec/layers.py", line 71, in call
+
+  File "/home/apatra/.conda/envs/RecSys/lib/python3.11/site-packages/keras/src/backend.py", line 3056, in exp
+
+JIT compilation failed.
+	 [[{{node model/time_distributed_1/news_encoder/att_layer2/Exp}}]] [Op:__inference_train_function_6543]
+2024-06-14 00:57:37.306495: W tensorflow/core/kernels/data/generator_dataset_op.cc:108] Error occurred when finalizing GeneratorDataset iterator: FAILED_PRECONDITION: Python interpreter state is not initialized. The process may be terminated.
+	 [[{{node PyFunc}}]]
+srun: error: gcn12: task 0: Exited with exit code 1
+srun: Terminating StepId=6636284.0
+
+JOB STATISTICS
+==============
+Job ID: 6636284
+Cluster: snellius
+User/Group: apatra/apatra
+State: FAILED (exit code 1)
+Nodes: 1
+Cores per node: 18
+CPU Utilized: 00:00:46
+CPU Efficiency: 4.12% of 00:18:36 core-walltime
+Job Wall-clock time: 00:01:02
+Memory Utilized: 2.32 GB
+Memory Efficiency: 23.79% of 9.77 GB
