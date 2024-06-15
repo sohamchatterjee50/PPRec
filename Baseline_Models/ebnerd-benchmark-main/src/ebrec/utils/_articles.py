@@ -129,3 +129,9 @@ def create_sort_based_prediction_score(
         .with_columns((1 / pl.col(_TEMP_NAME)).alias(prediction_score_col))
         .drop(_TEMP_NAME)
     )
+def concat_list_to_text(df, col_name, new_col_name):
+    col_data = df[col_name]
+    col_data = col_data.list.join(separator="-")
+    return df.with_columns(
+    pl.lit(col_data).alias(new_col_name)
+)

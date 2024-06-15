@@ -410,8 +410,7 @@ def create_lookup_dict(df: pl.DataFrame, key: str, value: str) -> dict:
 
 
 def create_lookup_objects(
-    lookup_dictionary: dict[int, np.array], unknown_representation: str
-) -> tuple[dict[int, pl.Series], np.array]:
+    lookup_dictionary: dict[int, np.array], unknown_representation: str,is_array=True) -> tuple[dict[int, pl.Series], np.array]:
     """Creates lookup objects for efficient data retrieval.
 
     This function generates a dictionary of indexes and a matrix from the given lookup dictionary.
@@ -470,15 +469,15 @@ def create_lookup_objects(
     }
     # MAKE LOOKUP MATRIX
     lookup_matrix = np.array(list(lookup_dictionary.values()))
+    if is_array:
+        if unknown_representation == "zeros":
+            UNKNOWN_ARRAY = np.zeros(lookup_matrix.shape[1], dtype=lookup_matrix.dtype)
+        elif unknown_representation == "mean":
+            UNKNOWN_ARRAY = np.mean(lookup_matrix, axis=0, dtype=lookup_matrix.dtype)
+        else:
+            raise ValueError(
+                f"'{unknown_representation}' is not a specified method. Can be either 'zeros' or 'mean'."
+            )
 
-    if unknown_representation == "zeros":
-        UNKNOWN_ARRAY = np.zeros(lookup_matrix.shape[1], dtype=lookup_matrix.dtype)
-    elif unknown_representation == "mean":
-        UNKNOWN_ARRAY = np.mean(lookup_matrix, axis=0, dtype=lookup_matrix.dtype)
-    else:
-        raise ValueError(
-            f"'{unknown_representation}' is not a specified method. Can be either 'zeros' or 'mean'."
-        )
-
-    lookup_matrix = np.vstack([UNKNOWN_ARRAY, lookup_matrix])
+        lookup_matrix = np.vstack([UNKNOWN_ARRAY, lookup_matrix])
     return lookup_indexes, lookup_matrix

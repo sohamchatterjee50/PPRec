@@ -12,6 +12,7 @@ src/data/train.py
 src/model/__init__.py
 src/model/dataloader.py
 src/model/model_config.py
+src/model/modules.py
 src/model/news_encoder.py
 src/model/popularity_predictor.py
 src/model/pprec.py
