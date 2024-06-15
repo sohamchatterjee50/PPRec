@@ -93,7 +93,22 @@ df_validation = (
     .sample(fraction=FRACTION)
 )
 df_articles = pl.read_parquet(PATH.joinpath("articles.parquet"))
-print(df_articles.head(2))
+
+
+
+df_articles=df_articles.with_columns((pl.col('total_pageviews') / pl.col('total_inviews') * 100).fill_null(0).alias('CTR'))
+
+df_articles=df_articles.with_columns((pl.col('total_pageviews') / pl.col('total_inviews') * 100).fill_null(0).alias('Recency'))
+
+# print(df_articles.select(['article_id', 'total_pageviews','total_inviews', 'CTR']))
+# kai_behav=pl.read_parquet(PATH.joinpath("ebnerd_small/train/history.parquet"))
+# print(kai_behav.head(2))
+# kai_behav=ebnerd_from_path(PATH.joinpath(DATASPLIT, "train"), history_size=HISTORY_SIZE)
+# # print(kai_behav.head(2))
+# for col in df_articles.columns:
+#     print(col)
+# print(df_articles.head())
+
 
 #MODEL KAI
 TRANSFORMER_MODEL_NAME = "FacebookAI/xlm-roberta-base"
@@ -108,13 +123,31 @@ transformer_tokenizer = AutoTokenizer.from_pretrained(TRANSFORMER_MODEL_NAME)
 word2vec_embedding = get_transformers_word_embeddings(transformer_model)
 #
 df_articles, cat_cal = concat_str_columns(df_articles, columns=TEXT_COLUMNS_TO_USE)
+# print("Hurricane",df_articles.head())
 df_articles, token_col_title = convert_text2encoding_with_transformers(
     df_articles, transformer_tokenizer, cat_cal, max_length=MAX_TITLE_LENGTH
 )
 # =>
+print("Hurricane2",token_col_title)
+
 article_mapping = create_article_id_to_value_mapping(
     df=df_articles, value_col=token_col_title
 )
+article_id_to_ctr_mapping = dict(zip(df_articles['article_id'].to_list(), df_articles['CTR'].to_list()))
+article_id_to_Recency_mapping = dict(zip(df_articles['article_id'].to_list(), df_articles['Recency'].to_list()))
+
+
+for i in article_mapping.keys():
+    # print(i,"Gorills",len(article_mapping[i]),article_mapping[i])
+    data_list = article_mapping[i].to_list()  # Convert to list
+    data_list.append(article_id_to_ctr_mapping[i])  # Append the number
+    data_list.append(article_id_to_Recency_mapping[i])  # Append the number
+    article_mapping[i] = pl.Series(data_list)
+    # print(article_mapping[i])
+
+
+
+print("hurricane 3")
 
 
 train_dataloader = NRMSDataLoader(
@@ -134,3 +167,5 @@ val_dataloader = NRMSDataLoader(
     batch_size=32,
 )
 
+for x,y in train_dataloader:
+    print(x[0].shape,x[1].shape,y.shape)

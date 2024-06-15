@@ -67,6 +67,7 @@ class NewsrecDataLoader(Dataset):
 
 @dataclass
 class NRMSDataLoader(NewsrecDataLoader):
+    # print("GORILLA")
     def transform(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.pipe(
             map_list_article_id_to_value,
@@ -88,6 +89,7 @@ class NRMSDataLoader(NewsrecDataLoader):
         pred_input_title:   (samples, npratio, document_dimension)
         batch_y:            (samples, npratio)
         """
+        # print("ora-",self.X[idx * self.batch_size : (idx + 1) * self.batch_size].head())
         batch_X = self.X[idx * self.batch_size : (idx + 1) * self.batch_size].pipe(
             self.transform
         )
