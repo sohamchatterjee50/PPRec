@@ -174,7 +174,7 @@ class RecencyEmbedding(nn.Module):
 
 @dataclass
 class RBPDConfig:
-    pass
+    hidden_layers: list[int]
 
 
 class RecencyBasedPopularityDense(nn.Module):
@@ -221,7 +221,7 @@ class RecencyBasedPopularityDense(nn.Module):
 
 @dataclass
 class CBPDConfig:
-    pass
+    hidden_layers: list[int]
 
 
 class ContentBasedPopularityDense(nn.Module):
@@ -269,7 +269,7 @@ class ContentBasedPopularityDense(nn.Module):
 
 @dataclass
 class CRGConfig:
-    pass
+    hidden_layers: list[int]
 
 
 class ContentRecencyGate(nn.Module):

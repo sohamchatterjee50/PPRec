@@ -113,7 +113,7 @@ class PPRec(nn.Module):
 
 @dataclass
 class PAGConfig:
-    pass
+    hidden_layers: list[int]
 
 
 class PersonalizedAggregatorGate(nn.Module):
