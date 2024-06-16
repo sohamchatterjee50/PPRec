@@ -24,6 +24,8 @@ class NewsrecDataLoader(Dataset):
 
     behaviors: pl.DataFrame
     history_column: str
+    history_recency: str
+    inview_recency: str
     article_dict: dict[int, any]
     unknown_representation: str
     eval_mode: bool = False
@@ -76,6 +78,7 @@ class PPRecDataLoader(NewsrecDataLoader):
     # unknown_subcategory_value: int = 0
     entity_mapping: dict[int, list[int]] = None
     ctr_mapping: dict[int, int] = None
+   
     # subcategory_mapping: dict[int, int] = None
 
     def __post_init__(self):
@@ -155,8 +158,8 @@ class PPRecDataLoader(NewsrecDataLoader):
             .with_columns(entities.select(pl.all().name.prefix(self.entity_prefix)))
             .with_columns(ctr.select(pl.all().name.prefix(self.ctr_prefix)))
             )
-        # with pl.Config(tbl_cols=-1):
-        #     print(transformed_df)
+        
+        #print(transformed_df.columns)
       
         return transformed_df
 
@@ -172,7 +175,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             #print(batch_X.columns)
             repeats_title = np.array(batch_X["title_n_samples"])
             repeats_entity = np.array(batch_X["ner_clusters_text_n_samples"])
-            # repeats_pop = np.array(batch_X["views_n_samples"])
+            repeats_ctr = np.array(batch_X["ctr_n_samples"])
             # =>
             # print("Before shape:",batch_y)
             #cnt=0
@@ -190,11 +193,19 @@ class PPRecDataLoader(NewsrecDataLoader):
                 matrix=self.lookup_article_matrix,
                 repeats=repeats_title,
             )
+            his_input_recency = np.array (
+                batch_X[self.title_prefix + self.history_recency].explode().to_list()
+            )
             
+
             # =>
             pred_input_title = self.lookup_article_matrix[
                 batch_X[self.title_prefix + self.inview_col].explode().to_list()
             ]
+            pred_input_recency = np.array(
+            batch_X[self.title_prefix + self.inview_recency].explode().to_list()
+            )
+        
 
             his_input_entity = repeat_by_list_values_from_matrix(
                 batch_X[self.entity_prefix + self.history_column].to_list(),
@@ -206,15 +217,16 @@ class PPRecDataLoader(NewsrecDataLoader):
                 batch_X[self.entity_prefix + self.inview_col].explode().to_list()
             ]
            
-            # his_input_pop = repeat_by_list_values_from_matrix(
-            #     batch_X[self.ctr_prefix + self.history_column].to_list(),
-            #     matrix=self.lookup_article_matrix,
-            #     repeats=repeats_pop,
-            # )
+            his_input_ctr = repeat_by_list_values_from_matrix(
+                batch_X[self.ctr_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix_ctr,
+                repeats=repeats_ctr,
+            )
             # # =>
-            # pred_input_pop = self.lookup_article_matrix[
-            #     batch_X[self.ctr_prefix + self.inview_col].explode().to_list()
-            # ]
+            pred_input_ctr = self.lookup_article_matrix_ctr[
+                batch_X[self.ctr_prefix + self.inview_col].explode().to_list()
+            ]
+           
            
             his_input_title = np.squeeze(
                 his_input_title, axis=2
@@ -223,9 +235,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_entity = np.squeeze(
                     his_input_entity, axis=2
                     )
-            # his_input_pop = np.squeeze(
-            #         his_input_pop, axis=2
-            #         )
+            
             
             
 
@@ -241,6 +251,10 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_ctr = np.array(
                 batch_X[self.ctr_prefix + self.history_column].to_list()
             )
+            his_input_recency = np.array(
+                batch_X[self.title_prefix +self.history_recency].to_list()
+            )
+            
             
             pred_input_title = np.array(
                 batch_X[self.title_prefix + self.inview_col].to_list()
@@ -251,18 +265,23 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_ctr = np.array(
                 batch_X[self.ctr_prefix + self.inview_col].to_list()
             )
+            pred_input_recency = np.array(
+                batch_X[self.title_prefix + self.inview_recency].to_list()
+            )
             
             
             pred_input_title = np.squeeze(
                 self.lookup_article_matrix[pred_input_title], axis=2
             )
-            
+            #print(pred_input_entity.shape)
             pred_input_entity = np.squeeze(
                 self.lookup_article_matrix_entity[pred_input_entity], axis=2
             )
-            pred_input_ctr = np.squeeze(
-                self.lookup_article_matrix_ctr[pred_input_ctr], axis=2
-            )
+            #print(pred_input_entity.shape)
+            #print(pred_input_ctr.shape)
+            
+            
+            
             
            
             
@@ -273,22 +292,23 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_entity = np.squeeze(
                     self.lookup_article_matrix_entity[his_input_entity], axis=2
                     )
-            his_input_ctr = np.squeeze(
-                    self.lookup_article_matrix_ctr[his_input_ctr], axis=2
-                    )
+           
         #print("History input title:",his_input_title)
         #print("PRedcited title",pred_input_title)
         final_X, final_Y =(
             his_input_title,
             his_input_entity,
             his_input_ctr,
+            his_input_recency,
             pred_input_title,
             pred_input_entity,
-            pred_input_ctr
+            pred_input_ctr,
+            pred_input_recency
         ), batch_y
+        
         #print("FIANL_X",final_X[0].shape)
         # print("Title embedding shape:",final_X[0].shape)
         # print("PRedicted embedding title:",final_X[2].shape)
         # print("Labels length",final_Y.shape)
-
+        
         return final_X,final_Y

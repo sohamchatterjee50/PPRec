@@ -132,8 +132,10 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         entities = torch.tensor(entities)
         word_embeddings = self.word2vec(words)
         entity_embeddings =  self.word2vec(entities)
+        #print(entity_embeddings.shape)
         #print(word_embeddings.shape)
         word_self_attn_output = self.word_self_attention([word_embeddings, word_embeddings, word_embeddings])
+        #print(word_self_attn_output.shape)
         entity_self_attn_output = self.entity_self_attention([entity_embeddings, entity_embeddings, entity_embeddings])
 
         word_cross_output = self.word_cross_attention([word_embeddings,entity_embeddings,entity_embeddings])
@@ -144,7 +146,7 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         entity_output = torch.add(entity_self_attn_output,entity_cross_output)
         #print(word_output.shape)
         #print(entity_output.shape)
-        news_encoder = self.final_attention_layer(word_output, entity_output, entity_output)
+        news_encoder,_ = self.final_attention_layer(word_output, entity_output, entity_output)
         return news_encoder
 
 
@@ -152,13 +154,14 @@ class KnowledgeAwareNewsEncoder(nn.Module):
 
 
 
-class TimeAwarePopularityEncoderder(nn.Module):
-    def __init__(self,news_input_shape,
-                 recency_input_shape,
+class TimeAwarePopularityEncoder(nn.Module):
+    def __init__(self,word2vec_embedding=None,
         seed=None,
         **kwargs,):
-        self.news_embed = nn.Sequential(
-          nn.Linear(news_input_shape,256),
+        super(TimeAwarePopularityEncoder, self).__init__()
+        self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+        self.news_model = nn.Sequential(
+          nn.Linear(768,256),
           nn.Tanh(),
           nn.Linear(256,256),
           nn.Tanh(),
@@ -166,37 +169,49 @@ class TimeAwarePopularityEncoderder(nn.Module):
           nn.Tanh(),
           nn.Linear(128,1,bias=False)
         )
+        self.dense = nn.Linear(30,1)
         
         
-        self.recency_embed = nn.Sequential(
-            nn.Linear(recency_input_shape,64),
+        self.recency_model = nn.Sequential(
+            nn.Linear(768,64),
             nn.Tanh(),
             nn.Linear(64,64),
             nn.Tanh(),
             nn.Linear(64,1,bias=False)
         )
         self.gate = nn.Sequential(
-            nn.Linear(recency_input_shape+news_input_shape,128),
+            nn.Linear(31,128),
             nn.Tanh(),
             nn.Linear(128,64),
             nn.Tanh(),
             nn.Linear(64,1),
             nn.Sigmoid()
         )
-        self.ctr_embed = nn.Sequential(
-        nn.Parameter(torch.randn_like(768)),
-        nn.Sigmoid()
-      )
-        self.combined_embed = nn.Parameter(torch.randn_like(1))
+        self.ctr_model = nn.Sigmoid()
+        self.combined_embed = nn.Linear(1,1)
 
 
     def forward(self,news, recency, ctr):
-        content_score = self.news_embed(news)
-        recency_score = self.recency_embed(recency)
-        combined_input = torch.concat([news,recency])
+        news_tensor = torch.tensor(news)
+        recency_tensor = torch.tensor(recency)
+        ctr_tensor = torch.tensor(ctr)
+        news_embed = self.word2vec(news_tensor)
+        recency_embed = self.word2vec(recency_tensor)
+        ctr_embed = self.word2vec(ctr_tensor)
+        content_score = self.news_model(news_embed)
+        recency_score = self.recency_model(recency_embed)
+        recency_tensor = recency_tensor.unsqueeze(-1)
+        combined_input = torch.cat([news_tensor,recency_tensor],2)
+        combined_input = combined_input.to(torch.float32)
         combined_score = self.gate(combined_input)
-        combined_prefinal_score = (1-combined_score)*content_score+combined_score*recency_score
-        ctr_score = self.ctr_embed(ctr)
+        final_content_score = content_score.squeeze(-1)
+        final_content_score = self.dense(final_content_score)
+        print("ALL:",combined_score.shape)
+        print("CONTENT:",final_content_score.shape)
+        print("RECENCY:",recency_score.shape)
+        combined_prefinal_score = (1-combined_score)*recency_score+combined_score*final_content_score
+        ctr_score = self.ctr_model(ctr_embed)
+
         combined_final_score = self.combined_embed(combined_prefinal_score)
         return ctr_score+combined_final_score
     
