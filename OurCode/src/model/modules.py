@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from src.model.model_config import PPRConfig
+from src.model.model_config import PPRConfig,CPJAConfig
 
 class SelfAttention(nn.Module):
     """Multi-head self attention implementation.
@@ -74,7 +74,7 @@ class SelfAttention(nn.Module):
             Q_len, V_len = None, None
         elif len(QKVs) == 5:
             Q_seq, K_seq, V_seq, Q_len, V_len = QKVs
-
+        #print(self.WQ.shape)
         Q_seq = Q_seq.matmul(self.WQ)
         Q_seq = Q_seq.view(-1, Q_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
 
@@ -117,30 +117,33 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         seed=None,
         **kwargs,):
         super().__init__()
-        self.word_self_attention = SelfAttention(hparams.multiheads, hparams.head_dim)
-        self.entity_self_attention = SelfAttention(hparams.multiheads, hparams.head_dim)
-        self.word_cross_attention = SelfAttention(hparams.multiheads, hparams.head_dim)
-        self.entity_cross_attention = SelfAttention(hparams.multiheads, hparams.head_dim)
-        self.word2vec = word2vec_embedding
-        self.final_attention_layer = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.num_heads)
+        self.word_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        self.entity_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        self.word_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        self.entity_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+        self.final_attention_layer = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num)
         
         
         
 
     def forward(self, words, entities):
+        words = torch.tensor(words)
+        entities = torch.tensor(entities)
         word_embeddings = self.word2vec(words)
         entity_embeddings =  self.word2vec(entities)
+        #print(word_embeddings.shape)
+        word_self_attn_output = self.word_self_attention([word_embeddings, word_embeddings, word_embeddings])
+        entity_self_attn_output = self.entity_self_attention([entity_embeddings, entity_embeddings, entity_embeddings])
 
-        word_self_attn_output, word_attn_output_weights = self.word_self_attention(word_embeddings, word_embeddings, word_embeddings)
-        entity_self_attn_output, entity_attn_output_weights = self.entity_self_attention(entity_embeddings, entity_embeddings, entity_embeddings)
-
-        word_cross_output, word_attn_outptut_weights = self.word_cross_attention(word_embeddings,entity_embeddings,entity_embeddings)
-        entity_cross_output, entity_cross_output_weights = self.word_cross_attention(entity_embeddings, word_embeddings, word_embeddings)
+        word_cross_output = self.word_cross_attention([word_embeddings,entity_embeddings,entity_embeddings])
+        entity_cross_output = self.word_cross_attention([entity_embeddings, word_embeddings, word_embeddings])
 
         
         word_output = torch.add(word_self_attn_output,word_cross_output)
         entity_output = torch.add(entity_self_attn_output,entity_cross_output)
-
+        #print(word_output.shape)
+        #print(entity_output.shape)
         news_encoder = self.final_attention_layer(word_output, entity_output, entity_output)
         return news_encoder
 
@@ -176,7 +179,7 @@ class TimeAwarePopularityEncoderder(nn.Module):
             nn.Linear(recency_input_shape+news_input_shape,128),
             nn.Tanh(),
             nn.Linear(128,64),
-            nn.Tanh()
+            nn.Tanh(),
             nn.Linear(64,1),
             nn.Sigmoid()
         )
@@ -289,7 +292,7 @@ class ContentPopularityJointAttention(nn.Module):
         assert am.size(2) == self.m_size
 
         u = torch.sum(am, dim=1)  # (batch_size, 
-        )
+        
         assert len(u.size()) == 2
         assert u.size(0) == batch_size
         assert u.size(1) == self.m_size

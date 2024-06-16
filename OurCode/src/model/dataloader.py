@@ -159,7 +159,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             .with_columns(ctr.select(pl.all().name.prefix(self.ctr_prefix)))
             )
         
-        print(transformed_df.columns)
+        #print(transformed_df.columns)
       
         return transformed_df
 
@@ -311,4 +311,4 @@ class PPRecDataLoader(NewsrecDataLoader):
         # print("PRedicted embedding title:",final_X[2].shape)
         # print("Labels length",final_Y.shape)
         
-        return final_X[3].shape,final_X[7].shape
+        return final_X,final_Y
