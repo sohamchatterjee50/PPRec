@@ -298,6 +298,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_title = np.array(
                 batch_X[self.title_prefix + self.inview_col].to_list()
             )
+            #print("GGGGG:",pred_input_title.shape)
             pred_input_entity = np.array(
                 batch_X[self.entity_prefix + self.inview_col].to_list()
             )
@@ -315,6 +316,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_title = np.squeeze(
                 self.lookup_article_matrix[pred_input_title], axis=2
             )
+            #print("HHHHH:",pred_input_title.shape)
             #print(pred_input_entity.shape)
             pred_input_entity = np.squeeze(
                 self.lookup_article_matrix_entity[pred_input_entity], axis=2
@@ -334,6 +336,14 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_entity = np.squeeze(
                     self.lookup_article_matrix_entity[his_input_entity], axis=2
                     )
+            pred_input_ctr = np.squeeze(
+                    pred_input_ctr,axis=2
+                )
+        
+        # print(his_input_recency.shape)
+        # print(pred_input_recency.shape)
+        # his_input_recency = np.squeeze(his_input_recency,axis=-1)
+        # pred_input_recency = np.squeeze(pred_input_recency,axis=-1)
            
         #print("History input title:",his_input_title)
         #print("PRedcited title",pred_input_title)

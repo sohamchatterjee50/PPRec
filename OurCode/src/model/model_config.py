@@ -120,9 +120,9 @@ class hparams_pprec:
     head_num: int = 8
     #head_dim: int = 8
     embed_dim: int = 768
-    max_clicked: int = 8
-    m_size: int = 256
-    p_size: int = 0
+    max_clicked: int = 10
+    m_size: int = 768
+    p_size: int = 768
     weight_size: int = 256
 
 
