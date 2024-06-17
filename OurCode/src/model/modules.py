@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from src.model.model_config import PPRConfig
 
 class SelfAttention(nn.Module):
     """Multi-head self attention implementation.
@@ -376,25 +375,17 @@ class PPRec(nn.Module):
 
     def __init__(
         self,
-        # The maximum articles a user has clicked on in the past.
-        # Depends on the dataloader used.
-        max_clicked: int,
-        # Needed by the lookup news encoder. So it can put its
-        # looked up embeddings on the right device.
-        device: torch.device,
-        config: PPRConfig,
-
+        hparams_pprec,
+        word2vec_embedding= None 
     ):
 
         super().__init__()
 
-        self.config = config
-        self.popularity_size_n = config.popularity_news_encoder_config.get_size_n()
-        self.user_size_n = config.user_news_encoder_config.get_size_n()
-        self.max_clicked = max_clicked
-        self.knowledge_news_model  = KnowledgeAwareNewsEncoder()
-        self.user_model = PopularityAwareUserEncoder()
-        self.time_news_model = TimeAwarePopularityEncoderder()
+       
+      
+        self.knowledge_news_model  = KnowledgeAwareNewsEncoder(hparams_pprec,word2vec_embedding,seed=123)
+        self.user_model = PopularityAwareUserEncoder(hparams_pprec, word2vec_embedding=word2vec_embedding, seed=123)
+        self.time_news_model = TimeAwarePopularityEncoder(word2vec_embedding=word2vec_embedding, seed=123)
 
         
         self.aggregator_gate = nn.Sequential(
@@ -404,7 +395,7 @@ class PPRec(nn.Module):
 
     def forward(
         self,
-        
+        title, entities, ctr, recency, popularity
     ):
         """
 
@@ -413,9 +404,13 @@ class PPRec(nn.Module):
 
         """
 
-        user_embed = self.user_model()
-        knowledge_news_embed = self.knowledge_news_model()
-        news_pop_score = self.time_news_model()
+        
+        knowledge_news_embed = self.knowledge_news_model(title, entities)
+        print("Knowldege aware news:",knowledge_news_embed.shape)
+        news_pop_score = self.time_news_model(title, recency, ctr)
+        print("Time aware news:",news_pop_score.shape)
+        user_embed = self.user_model(title,popularity)
+        print("User embed:",user_embed.shape)
         personalized_score = torch.dot(knowledge_news_embed,user_embed)
         return self.aggregator_gate(news_pop_score) + (1-self.aggregator_gate(personalized_score))
 

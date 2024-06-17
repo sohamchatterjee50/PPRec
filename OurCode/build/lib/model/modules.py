@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from src.model.model_config import PPRConfig
 
 class SelfAttention(nn.Module):
     """Multi-head self attention implementation.
@@ -234,7 +233,7 @@ class ContentPopularityJointAttention(nn.Module):
         # Lets check in their code, or ask Songga, or do some
         # research on the topic.
 
-        self.Wu = nn.Parameter(torch.rand(128, m_size + p_size))
+        self.Wu = nn.Parameter(torch.rand(512, m_size + p_size))
         self.b = nn.Parameter(torch.rand(weight_size))
 
         self.weight_size = weight_size
@@ -255,41 +254,47 @@ class ContentPopularityJointAttention(nn.Module):
         where max_clicked is the number of clicked articles by the user.
 
         """
-
-        assert len(m.size()) == 3
+        
+        # assert len(m.size()) == 3
+        # print(m.shape)
+        # print(p.shape)
         batch_size, max_clicked, m_size = m.size()
         #print(m.size())
         # print("m_size:",m_size)
         # print("self.m_size",self.m_size)
-        assert m_size == self.m_size
+        # assert m_size == self.m_size
         # print(max_clicked)
         # print(self.max_clicked)
-        assert max_clicked == self.max_clicked
-
+        # assert max_clicked == self.max_clicked
+        #print("HHHh")
         # assert len(p.size()) == 3
         # assert p.size(0) == batch_size
         # assert p.size(1) == max_clicked
         # assert p.size(2) == self.p_size
-        print(m.shape)
-        print(p.shape)
+        
+       
+        
         mp = torch.cat((m, p), dim=2)  # (batch_size, max_clicked, m_size + p_size)
         assert len(mp.size()) == 3
         assert mp.size(0) == batch_size
         assert mp.size(1) == max_clicked
-        assert mp.size(2) == self.m_size + self.p_size
-
-        Wu_mp = torch.matmul(mp, self.Wu.T)  # (batch_size, max_clicked, weight_size)
+        #assert mp.size(2) == self.m_size + self.p_size
+        # print(mp.shape)
+        # print(self.Wu.T.shape)
+        Wu_mp = torch.matmul(mp, self.Wu)  # (batch_size, max_clicked, weight_size)
         assert len(Wu_mp.size()) == 3
         assert Wu_mp.size(0) == batch_size
         assert Wu_mp.size(1) == max_clicked
-        assert Wu_mp.size(2) == self.weight_size
+        #print(Wu_mp.size(2))
+        #assert Wu_mp.size(2) == self.weight_size
 
         tanh_Wu_mp = torch.tanh(Wu_mp)  # (batch_size, max_clicked, weight_size)
         assert len(tanh_Wu_mp.size()) == 3
         assert tanh_Wu_mp.size(0) == batch_size
         assert tanh_Wu_mp.size(1) == max_clicked
-        assert tanh_Wu_mp.size(2) == self.weight_size
-
+        # assert tanh_Wu_mp.size(2) == self.weight_size
+        # print(tanh_Wu_mp.shape)
+        # print(self.b.shape)
         b_tanh_Wu_mp = torch.matmul(tanh_Wu_mp, self.b)  # (batch_size, max_clicked)
         assert len(b_tanh_Wu_mp.size()) == 2
         assert b_tanh_Wu_mp.size(0) == batch_size
@@ -310,6 +315,8 @@ class ContentPopularityJointAttention(nn.Module):
         assert len(am.size()) == 3
         assert am.size(0) == batch_size
         assert am.size(1) == max_clicked
+        # print(am.shape)
+        # print(self.m_size)
         assert am.size(2) == self.m_size
 
         u = torch.sum(am, dim=1)  # (batch_size, 
@@ -331,9 +338,9 @@ class PopularityAwareUserEncoder(nn.Module):
 
                  self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
                  self.pop_embed = nn.Sequential(
-            nn.Linear(1,128),
+            nn.Linear(1,256),
             nn.Tanh(),
-            nn.Linear(128,1),
+            nn.Linear(256,256),
             nn.Tanh()
         )
                  self.news_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
@@ -347,7 +354,12 @@ class PopularityAwareUserEncoder(nn.Module):
         popularity_embedding = self.pop_embed(pop_tensor)
         news_embedding = self.word2vec(news_tensor)
         news_attention_embedding = self.news_self_attention([news_embedding,news_embedding,news_embedding])
-        print(news_attention_embedding.shape)
+        # print(news_attention_embedding.shape)
+        # print(popularity_embedding.shape)
+        news_attention_embedding = news_attention_embedding.view(-1)
+        target_shape=popularity_embedding.shape
+        news_attention_embedding = news_attention_embedding[:torch.prod(torch.tensor(target_shape))].view(*target_shape, -1)
+        news_attention_embedding = news_attention_embedding.squeeze(-1)
         pop_aware_user_encoder = self.cpja(news_attention_embedding,popularity_embedding)
         return pop_aware_user_encoder
     
@@ -363,25 +375,17 @@ class PPRec(nn.Module):
 
     def __init__(
         self,
-        # The maximum articles a user has clicked on in the past.
-        # Depends on the dataloader used.
-        max_clicked: int,
-        # Needed by the lookup news encoder. So it can put its
-        # looked up embeddings on the right device.
-        device: torch.device,
-        config: PPRConfig,
-
+        hparams_pprec,
+        word2vec_embedding= None 
     ):
 
         super().__init__()
 
-        self.config = config
-        self.popularity_size_n = config.popularity_news_encoder_config.get_size_n()
-        self.user_size_n = config.user_news_encoder_config.get_size_n()
-        self.max_clicked = max_clicked
-        self.knowledge_news_model  = KnowledgeAwareNewsEncoder()
-        self.user_model = PopularityAwareUserEncoder()
-        self.time_news_model = TimeAwarePopularityEncoderder()
+       
+      
+        self.knowledge_news_model  = KnowledgeAwareNewsEncoder(hparams_pprec,word2vec_embedding,seed=123)
+        self.user_model = PopularityAwareUserEncoder(hparams_pprec, word2vec_embedding=word2vec_embedding, seed=123)
+        self.time_news_model = TimeAwarePopularityEncoder(word2vec_embedding=word2vec_embedding, seed=123)
 
         
         self.aggregator_gate = nn.Sequential(
@@ -391,7 +395,7 @@ class PPRec(nn.Module):
 
     def forward(
         self,
-        
+        title, entities, ctr, recency, popularity
     ):
         """
 
@@ -400,9 +404,13 @@ class PPRec(nn.Module):
 
         """
 
-        user_embed = self.user_model()
-        knowledge_news_embed = self.knowledge_news_model()
-        news_pop_score = self.time_news_model()
+        
+        knowledge_news_embed = self.knowledge_news_model(title, entities)
+        print("Knowldege aware news:",knowledge_news_embed.shape)
+        news_pop_score = self.time_news_model(title, recency, ctr)
+        print("Time aware news:",news_pop_score.shape)
+        user_embed = self.user_model(title,popularity)
+        print("User embed:",user_embed.shape)
         personalized_score = torch.dot(knowledge_news_embed,user_embed)
         return self.aggregator_gate(news_pop_score) + (1-self.aggregator_gate(personalized_score))
 

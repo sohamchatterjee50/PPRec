@@ -119,11 +119,11 @@ class hparams_pprec:
     learning_rate: float = 0.0001
     head_num: int = 4
     head_dim: int = 768
-    embed_dim: int = 6144
+    embed_dim: int = 3072
     max_clicked: int = 8
     m_size: int = 256
-    p_size: int = 2
-    weight_size: int = 258
+    p_size: int = 0
+    weight_size: int = 256
 
 
 class PPRConfig:
