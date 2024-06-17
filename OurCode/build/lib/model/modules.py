@@ -412,6 +412,7 @@ class PPRec(nn.Module):
             nn.Sigmoid()
         )
         self.title_size = hparams_pprec.title_size
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(
         self,
@@ -443,9 +444,36 @@ class PPRec(nn.Module):
         personalized_score = torch.mean(personalized_score,dim=2,keepdim=False)
         score2 =  (1-self.aggregator_gate(personalized_score))
         #print(score2.shape)
-        return score1 + score2
+        score = score1 + score2
+        return self.softmax(score)
 
         
+class BPELoss(nn.Module):
+    def __init__(self):
+        super(BPELoss, self).__init__()
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, output, target): 
+         target = torch.tensor(target)
+         batch_size = target.shape[0]
+         total_no_samples = target.shape[1]
+         
+         #print("Preds:",output)
+         #print("Target:",target)
+         mask = target > 0
+         postive_index_select = torch.masked_select(output, mask)
+         #print(postive_index_select)
+         neg_mask = target == 0
+         negative_index_select = torch.masked_select(output, neg_mask)
+         negative_index_select = torch.reshape(negative_index_select,(batch_size,total_no_samples-1))
+         #print(negative_index_select)
+         negative_index_select,_ = torch.min(negative_index_select, dim=1, keepdim = True)
+         diff = torch.sub(postive_index_select, negative_index_select)
+         diff_sig = self.sigmoid(diff)
+         diff_log = torch.log(diff_sig)
+         return - torch.mean(diff_log)
+         
+
 
         
 
