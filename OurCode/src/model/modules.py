@@ -155,7 +155,7 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         word_cross_output,_ = self.word_cross_attention(word_embeddings,entity_embeddings,entity_embeddings)
         entity_cross_output,_ = self.word_cross_attention(entity_embeddings, word_embeddings, word_embeddings)
         #print("Word cross attention:",word_cross_output.shape)
-        print("Entity cross attention:",entity_cross_output.shape)
+        #print("Entity cross attention:",entity_cross_output.shape)
 
         
         word_output = torch.add(word_self_attn_output,word_cross_output)
@@ -402,21 +402,20 @@ class PPRec(nn.Module):
 
         super().__init__()
 
-       
-      
         self.knowledge_news_model  = KnowledgeAwareNewsEncoder(hparams_pprec,word2vec_embedding,seed=123)
         self.user_model = PopularityAwareUserEncoder(hparams_pprec, word2vec_embedding=word2vec_embedding, seed=123)
         self.time_news_model = TimeAwarePopularityEncoder(word2vec_embedding=word2vec_embedding, seed=123)
 
         
         self.aggregator_gate = nn.Sequential(
-            nn.Linear(1,1),
+            nn.Linear(5,5),
             nn.Sigmoid()
         )
+        self.title_size = hparams_pprec.title_size
 
     def forward(
         self,
-        title, entities, ctr, recency, popularity
+        title, entities, ctr, recency, hist_title, hist_popularity
     ):
         """
 
@@ -427,13 +426,24 @@ class PPRec(nn.Module):
 
         
         knowledge_news_embed = self.knowledge_news_model(title, entities)
-        print("Knowldege aware news:",knowledge_news_embed.shape)
-        news_pop_score = self.time_news_model(title, recency, ctr)
-        print("Time aware news:",news_pop_score.shape)
-        user_embed = self.user_model(title,popularity)
-        print("User embed:",user_embed.shape)
-        personalized_score = torch.dot(knowledge_news_embed,user_embed)
-        return self.aggregator_gate(news_pop_score) + (1-self.aggregator_gate(personalized_score))
+        #print("Knowldege aware news:",knowledge_news_embed.shape)
+        time_aware_pop = self.time_news_model(title, recency, ctr)
+        
+        user_embed = self.user_model(hist_title,hist_popularity)
+        #print("User embed:",user_embed.shape)
+        time_aware_pop = torch.mean(time_aware_pop, dim=2, keepdim=False)
+        knowledge_news_embed = torch.reshape(knowledge_news_embed, (knowledge_news_embed.shape[0],int(knowledge_news_embed.shape[1]/self.title_size), self.title_size,knowledge_news_embed.shape[2]))
+        knowledge_news_embed = torch.mean(knowledge_news_embed, dim=2, keepdim=False)
+        
+        personalized_score = torch.matmul(knowledge_news_embed,user_embed.T)
+        #print(personalized_score.shape)
+        #print("Time aware news:",time_aware_pop.shape)
+        score1 =  self.aggregator_gate(time_aware_pop) 
+        #print(score1.shape)
+        personalized_score = torch.mean(personalized_score,dim=2,keepdim=False)
+        score2 =  (1-self.aggregator_gate(personalized_score))
+        #print(score2.shape)
+        return score1 + score2
 
         
 

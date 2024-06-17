@@ -121,7 +121,7 @@ class hparams_pprec:
     #head_dim: int = 8
     embed_dim: int = 768
     max_clicked: int = 10
-    m_size: int = 256
+    m_size: int = 768
     p_size: int = 768
     weight_size: int = 256
 
