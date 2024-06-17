@@ -83,7 +83,7 @@ from torch.nn.parameter import Parameter
 #         V_seq = V_seq.matmul(self.WV)
 #         V_seq = V_seq.view(-1, V_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
 
-#         A = Q_seq.matmul(K_seq.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32))
+#         
 #         A = A.permute(0, 3, 2, 1)
 #         A = self.mask(A, V_len, "add")
 #         A = A.permute(0, 3, 2, 1)
@@ -127,19 +127,19 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         self.entity_cross_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
 
         
-        self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+        self.word2vec = nn.Embedding.from_pretrained(word2vec_embedding)
+        self.entity2vec = nn.Embedding.from_pretrained(word2vec_embedding)
         self.final_attention_layer = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
         
         
         
 
     def forward(self, words, entities):
-        words = torch.tensor(words)
-        entities = torch.tensor(entities)
+        
         # words = torch.reshape(words,(words.shape[0],words.shape[1]*words.shape[2]))
         # entities = torch.reshape(entities,(entities.shape[0],entities.shape[1]*entities.shape[2]))
         word_embeddings = self.word2vec(words)
-        entity_embeddings =  self.word2vec(entities)
+        entity_embeddings =  self.entity2vec(entities)
         # print(word_embeddings.shape)
         # print(entity_embeddings.shape)
         word_embeddings = torch.reshape(word_embeddings,(word_embeddings.shape[0],word_embeddings.shape[1]*word_embeddings.shape[2],word_embeddings.shape[3]))
@@ -172,7 +172,7 @@ class TimeAwarePopularityEncoder(nn.Module):
         seed=None,
         **kwargs,):
         super(TimeAwarePopularityEncoder, self).__init__()
-        self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+        self.word2vec = nn.Embedding.from_pretrained(word2vec_embedding)
         self.news_model = nn.Sequential(
           nn.Linear(768,256),
           nn.Tanh(),
@@ -205,20 +205,16 @@ class TimeAwarePopularityEncoder(nn.Module):
 
 
     def forward(self,news, recency, ctr):
-        news_tensor = torch.tensor(news)
-        #print(news_tensor.shape)
-        recency_tensor = torch.tensor(recency)
-        ctr_tensor = torch.tensor(ctr)
-        #ctr_tensor = torch.repeat_interleave(ctr_tensor,news_tensor.shape[2] , dim=1)
-        #ctr_tensor = torch.reshape(ctr_tensor,(ctr_tensor.shape[0],news_tensor.shape[1],news_tensor.shape[2]))
-        news_embed = self.word2vec(news_tensor)
-        recency_embed = self.word2vec(recency_tensor)
-        ctr_embed = self.word2vec(ctr_tensor)
+        
+        
+        news_embed = self.word2vec(news)
+        recency_embed = self.word2vec(recency)
+        ctr_embed = self.word2vec(ctr)
         content_score = self.news_model(news_embed)
         recency_score = self.recency_model(recency_embed)
-        recency_tensor = recency_tensor.unsqueeze(-1)
+        recency_tensor = recency.unsqueeze(-1)
 
-        combined_input = torch.cat([news_tensor,recency_tensor],2)
+        combined_input = torch.cat([news,recency_tensor],2)
         combined_input = combined_input.to(torch.float32)
 
         combined_score = self.gate(combined_input)
@@ -345,14 +341,14 @@ class PopularityAwareUserEncoder(nn.Module):
                 **kwargs,):
                  super().__init__()
 
-                 self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+                 self.word2vec = nn.Embedding.from_pretrained(word2vec_embedding)
         #          self.pop_embed = nn.Sequential(
         #     nn.Linear(1,256),
         #     nn.Tanh(),
         #     nn.Linear(256,256),
         #     nn.Tanh()
         # )
-                 self.pop_embed = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
+                 self.pop_embed = nn.Embedding.from_pretrained(word2vec_embedding)
                  #self.news_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
                  self.news_self_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
                  self.cpja = ContentPopularityJointAttention(hparams.max_clicked, hparams.m_size, hparams.p_size,hparams.weight_size)
@@ -360,12 +356,11 @@ class PopularityAwareUserEncoder(nn.Module):
                  self.title_length = hparams.title_size
 
     def forward(self,news,popularity):
-        pop_tensor = torch.tensor(popularity)
-        news_tensor = torch.tensor(news)
-        #pop_tensor = pop_tensor.to(torch.float32)
-        popularity_embedding = self.pop_embed(pop_tensor)
+        
+        
+        popularity_embedding = self.pop_embed(popularity)
         popularity_embedding = popularity_embedding.squeeze(axis=2)
-        news_embedding = self.word2vec(news_tensor)
+        news_embedding = self.word2vec(news)
         news_embedding = torch.reshape(news_embedding,(news_embedding.shape[0],news_embedding.shape[1]*news_embedding.shape[2],news_embedding.shape[3]))
         #print("Before:",news_embedding.shape)
         #print("Before:",popularity_embedding.shape)
@@ -374,7 +369,7 @@ class PopularityAwareUserEncoder(nn.Module):
         # print(popularity_embedding.shape)
         #news_attention_embedding = news_attention_embedding.view(-1)
         #target_shape=popularity_embedding.shape
-        #news_attention_embedding = news_attention_embedding[:torch.prod(torch.tensor(target_shape))].view(*target_shape, -1)
+        
         #news_attention_embedding = news_attention_embedding.squeeze(-1)
 
         news_attention_embedding = torch.reshape(news_attention_embedding,(news_attention_embedding.shape[0],self.max_clicked,self.title_length,news_attention_embedding.shape[2]))
@@ -402,9 +397,9 @@ class PPRec(nn.Module):
 
         super().__init__()
 
-        self.knowledge_news_model  = KnowledgeAwareNewsEncoder(hparams_pprec,word2vec_embedding,seed=123)
-        self.user_model = PopularityAwareUserEncoder(hparams_pprec, word2vec_embedding=word2vec_embedding, seed=123)
-        self.time_news_model = TimeAwarePopularityEncoder(word2vec_embedding=word2vec_embedding, seed=123)
+        self.knowledge_news_model  = KnowledgeAwareNewsEncoder(hparams_pprec,torch.from_numpy(word2vec_embedding),seed=123)
+        self.user_model = PopularityAwareUserEncoder(hparams_pprec, word2vec_embedding=torch.from_numpy(word2vec_embedding), seed=123)
+        self.time_news_model = TimeAwarePopularityEncoder(word2vec_embedding=torch.from_numpy(word2vec_embedding), seed=123)
 
         
         self.aggregator_gate = nn.Sequential(
@@ -454,7 +449,7 @@ class BPELoss(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, output, target): 
-         target = torch.tensor(target)
+         
          batch_size = target.shape[0]
          total_no_samples = target.shape[1]
          
@@ -475,7 +470,7 @@ class BPELoss(nn.Module):
          
 
 
-def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,loss_fn):
+def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,loss_fn,device):
     running_loss = 0.
     last_loss = 0.
 
@@ -488,6 +483,8 @@ def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,los
         inputs, labels = data
         # Zero your gradients for every batch!
         optimizer.zero_grad()
+        
+        
 
 
 
@@ -497,6 +494,22 @@ def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,los
         recency = inputs[8]
         hist_title = inputs[0]
         hist_popularity = inputs[2]
+        
+        title = torch.from_numpy(title)
+        entities = torch.from_numpy(entities)
+        ctr = torch.from_numpy(ctr)
+        recency = torch.from_numpy(recency)
+        hist_title = torch.from_numpy(hist_title)
+        hist_popularity = torch.from_numpy(hist_popularity)
+        labels = torch.from_numpy(labels)
+        
+        title = title.to(device)
+        entities = entities.to(device)
+        ctr = ctr.to(device)
+        recency = recency.to(device)
+        hist_title = hist_title.to(device)
+        hist_popularity = hist_popularity.to(device)
+        labels = labels.to(device)
 
         # print("Train mode:")
         # print(title.shape)
