@@ -5,101 +5,101 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-class SelfAttention(nn.Module):
-    """Multi-head self attention implementation.
+# class SelfAttention(nn.Module):
+#     """Multi-head self attention implementation.
 
-    Args:
-        multiheads (int): The number of heads.
-        head_dim (object): Dimension of each head.
-        mask_right (boolean): whether to mask right words.
-    """
+#     Args:
+#         multiheads (int): The number of heads.
+#         head_dim (object): Dimension of each head.
+#         mask_right (boolean): whether to mask right words.
+#     """
 
-    def __init__(self, multiheads, head_dim, mask_right=False, seed=0):
-        """Initialization steps for SelfAttention.
+#     def __init__(self, multiheads, head_dim, mask_right=False, seed=0):
+#         """Initialization steps for SelfAttention.
 
-        Args:
-            multiheads (int): The number of heads.
-            head_dim (object): Dimension of each head.
-            mask_right (boolean): whether to mask right words.
-        """
-        super(SelfAttention, self).__init__()
-        self.multiheads = multiheads
-        self.head_dim = head_dim
-        self.output_dim = multiheads * head_dim
-        self.mask_right = mask_right
-        self.seed = seed
+#         Args:
+#             multiheads (int): The number of heads.
+#             head_dim (object): Dimension of each head.
+#             mask_right (boolean): whether to mask right words.
+#         """
+#         super(SelfAttention, self).__init__()
+#         self.multiheads = multiheads
+#         self.head_dim = head_dim
+#         self.output_dim = multiheads * head_dim
+#         self.mask_right = mask_right
+#         self.seed = seed
 
-        self.WQ = nn.Parameter(torch.randn(head_dim, self.output_dim))
-        self.WK = nn.Parameter(torch.randn(head_dim, self.output_dim))
-        self.WV = nn.Parameter(torch.randn(head_dim, self.output_dim))
+#         self.WQ = nn.Parameter(torch.randn(head_dim, self.output_dim))
+#         self.WK = nn.Parameter(torch.randn(head_dim, self.output_dim))
+#         self.WV = nn.Parameter(torch.randn(head_dim, self.output_dim))
 
-        nn.init.xavier_uniform_(self.WQ)
-        nn.init.xavier_uniform_(self.WK)
-        nn.init.xavier_uniform_(self.WV)
+#         nn.init.xavier_uniform_(self.WQ)
+#         nn.init.xavier_uniform_(self.WK)
+#         nn.init.xavier_uniform_(self.WV)
 
-    def mask(self, inputs, seq_len, mode="add"):
-        """Mask operation used in multi-head self attention
+#     def mask(self, inputs, seq_len, mode="add"):
+#         """Mask operation used in multi-head self attention
 
-        Args:
-            seq_len (object): sequence length of inputs.
-            mode (str): mode of mask.
+#         Args:
+#             seq_len (object): sequence length of inputs.
+#             mode (str): mode of mask.
 
-        Returns:
-            object: tensors after masking.
-        """
-        if seq_len is None:
-            return inputs
-        else:
-            mask = torch.arange(inputs.size(1), device=inputs.device).expand(len(seq_len), inputs.size(1)) < seq_len.unsqueeze(1)
-            mask = 1 - mask.float()
-            mask = mask.unsqueeze(1).unsqueeze(3) if len(inputs.shape) > 3 else mask.unsqueeze(1)
+#         Returns:
+#             object: tensors after masking.
+#         """
+#         if seq_len is None:
+#             return inputs
+#         else:
+#             mask = torch.arange(inputs.size(1), device=inputs.device).expand(len(seq_len), inputs.size(1)) < seq_len.unsqueeze(1)
+#             mask = 1 - mask.float()
+#             mask = mask.unsqueeze(1).unsqueeze(3) if len(inputs.shape) > 3 else mask.unsqueeze(1)
 
-            if mode == "mul":
-                return inputs * mask
-            elif mode == "add":
-                return inputs - (1 - mask) * 1e12
+#             if mode == "mul":
+#                 return inputs * mask
+#             elif mode == "add":
+#                 return inputs - (1 - mask) * 1e12
 
-    def forward(self, QKVs):
-        """Core logic of multi-head self attention.
+#     def forward(self, QKVs):
+#         """Core logic of multi-head self attention.
 
-        Args:
-            QKVs (list): inputs of multi-head self attention i.e. query, key and value.
+#         Args:
+#             QKVs (list): inputs of multi-head self attention i.e. query, key and value.
 
-        Returns:
-            object: output tensors.
-        """
-        if len(QKVs) == 3:
-            Q_seq, K_seq, V_seq = QKVs
-            Q_len, V_len = None, None
-        elif len(QKVs) == 5:
-            Q_seq, K_seq, V_seq, Q_len, V_len = QKVs
-        #print(self.WQ.shape)
-        Q_seq = Q_seq.matmul(self.WQ)
-        Q_seq = Q_seq.view(-1, Q_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
+#         Returns:
+#             object: output tensors.
+#         """
+#         if len(QKVs) == 3:
+#             Q_seq, K_seq, V_seq = QKVs
+#             Q_len, V_len = None, None
+#         elif len(QKVs) == 5:
+#             Q_seq, K_seq, V_seq, Q_len, V_len = QKVs
+#         #print(self.WQ.shape)
+#         Q_seq = Q_seq.matmul(self.WQ)
+#         Q_seq = Q_seq.view(-1, Q_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
 
-        K_seq = K_seq.matmul(self.WK)
-        K_seq = K_seq.view(-1, K_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
+#         K_seq = K_seq.matmul(self.WK)
+#         K_seq = K_seq.view(-1, K_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
 
-        V_seq = V_seq.matmul(self.WV)
-        V_seq = V_seq.view(-1, V_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
+#         V_seq = V_seq.matmul(self.WV)
+#         V_seq = V_seq.view(-1, V_seq.size(1), self.multiheads, self.head_dim).permute(0, 2, 1, 3)
 
-        A = Q_seq.matmul(K_seq.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32))
-        A = A.permute(0, 3, 2, 1)
-        A = self.mask(A, V_len, "add")
-        A = A.permute(0, 3, 2, 1)
+#         A = Q_seq.matmul(K_seq.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32))
+#         A = A.permute(0, 3, 2, 1)
+#         A = self.mask(A, V_len, "add")
+#         A = A.permute(0, 3, 2, 1)
 
-        if self.mask_right:
-            mask = torch.tril(torch.ones(A.size(-2), A.size(-1), device=A.device)).unsqueeze(0).unsqueeze(0) * -1e12
-            A = A + mask
+#         if self.mask_right:
+#             mask = torch.tril(torch.ones(A.size(-2), A.size(-1), device=A.device)).unsqueeze(0).unsqueeze(0) * -1e12
+#             A = A + mask
 
-        A = F.softmax(A, dim=-1)
+#         A = F.softmax(A, dim=-1)
 
-        O_seq = A.matmul(V_seq)
-        O_seq = O_seq.permute(0, 2, 1, 3).contiguous()
-        O_seq = O_seq.view(-1, O_seq.size(2), self.output_dim)
-        O_seq = self.mask(O_seq, Q_len, "mul")
+#         O_seq = A.matmul(V_seq)
+#         O_seq = O_seq.permute(0, 2, 1, 3).contiguous()
+#         O_seq = O_seq.view(-1, O_seq.size(2), self.output_dim)
+#         O_seq = self.mask(O_seq, Q_len, "mul")
 
-        return O_seq
+#         return O_seq
 
 # Example usage
 # multiheads = 8
@@ -116,12 +116,19 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         seed=None,
         **kwargs,):
         super().__init__()
-        self.word_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
-        self.entity_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
-        self.word_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
-        self.entity_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        # self.word_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        # self.entity_self_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        # self.word_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+        # self.entity_cross_attention = SelfAttention(hparams.head_num, hparams.head_dim)
+
+        self.word_self_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num,batch_first=True)
+        self.entity_self_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num,batch_first=True)
+        self.word_cross_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
+        self.entity_cross_attention = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
+
+        
         self.word2vec = nn.Embedding.from_pretrained(torch.tensor(word2vec_embedding))
-        self.final_attention_layer = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num)
+        self.final_attention_layer = torch.nn.MultiheadAttention(hparams.embed_dim,hparams.head_num, batch_first=True)
         
         
         
@@ -129,16 +136,26 @@ class KnowledgeAwareNewsEncoder(nn.Module):
     def forward(self, words, entities):
         words = torch.tensor(words)
         entities = torch.tensor(entities)
+        # words = torch.reshape(words,(words.shape[0],words.shape[1]*words.shape[2]))
+        # entities = torch.reshape(entities,(entities.shape[0],entities.shape[1]*entities.shape[2]))
         word_embeddings = self.word2vec(words)
         entity_embeddings =  self.word2vec(entities)
-        #print(entity_embeddings.shape)
-        #print(word_embeddings.shape)
-        word_self_attn_output = self.word_self_attention([word_embeddings, word_embeddings, word_embeddings])
-        #print(word_self_attn_output.shape)
-        entity_self_attn_output = self.entity_self_attention([entity_embeddings, entity_embeddings, entity_embeddings])
+        # print(word_embeddings.shape)
+        # print(entity_embeddings.shape)
+        word_embeddings = torch.reshape(word_embeddings,(word_embeddings.shape[0],word_embeddings.shape[1]*word_embeddings.shape[2],word_embeddings.shape[3]))
+        entity_embeddings = torch.reshape(entity_embeddings,(entity_embeddings.shape[0],entity_embeddings.shape[1]*entity_embeddings.shape[2],entity_embeddings.shape[3]))
+        # print(word_embeddings.shape)
+        # print(entity_embeddings.shape)
 
-        word_cross_output = self.word_cross_attention([word_embeddings,entity_embeddings,entity_embeddings])
-        entity_cross_output = self.word_cross_attention([entity_embeddings, word_embeddings, word_embeddings])
+        word_self_attn_output,_ = self.word_self_attention(word_embeddings, word_embeddings, word_embeddings)
+        #print("Shape after word attention:",word_self_attn_output.shape)
+        entity_self_attn_output,_ = self.entity_self_attention(entity_embeddings, entity_embeddings, entity_embeddings)
+        #print("Shape after entity self attention:",entity_self_attn_output.shape)
+
+        word_cross_output,_ = self.word_cross_attention(word_embeddings,entity_embeddings,entity_embeddings)
+        entity_cross_output,_ = self.word_cross_attention(entity_embeddings, word_embeddings, word_embeddings)
+        #print("Word cross attention:",word_cross_output.shape)
+        print("Entity cross attention:",entity_cross_output.shape)
 
         
         word_output = torch.add(word_self_attn_output,word_cross_output)
@@ -147,9 +164,6 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         #print(entity_output.shape)
         news_encoder,_ = self.final_attention_layer(word_output, entity_output, entity_output)
         return news_encoder
-
-
-        
 
 
 
