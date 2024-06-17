@@ -475,7 +475,57 @@ class BPELoss(nn.Module):
          
 
 
+def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,loss_fn):
+    running_loss = 0.
+    last_loss = 0.
+
+    # Here, we use enumerate(training_loader) instead of
+    # iter(training_loader) so that we can track the batch
+    # index and do some intra-epoch reporting
+    for i, data in enumerate(train_dataloader):
+        # Every data instance is an input + label pair
         
+        inputs, labels = data
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
+
+
+
+        title = inputs[5]
+        entities = inputs[6]
+        ctr = inputs[7]
+        recency = inputs[8]
+        hist_title = inputs[0]
+        hist_popularity = inputs[2]
+
+        # print("Train mode:")
+        # print(title.shape)
+        # print(entities.shape)
+        # print(ctr.shape)
+        # print(recency.shape)
+        # print(hist_title.shape)
+        # print(hist_popularity.shape)
+        # print("--------")
+
+        outputs = model(title, entities, ctr, recency ,hist_title, hist_popularity )
+        loss = loss_fn(outputs, labels)
+        #print("Train Loss:",loss)
+
+        loss.backward()
+
+        # Adjust learning weights
+        optimizer.step()
+
+        # Gather data and report
+        running_loss += loss.item()
+        if i % 1000 == 999:
+            last_loss = running_loss / 1000 # loss per batch
+            print('  batch {} loss: {}'.format(i + 1, last_loss))
+            tb_x = epoch_index * len(train_dataloader) + i + 1
+            tb_writer.add_scalar('Loss/train', last_loss, tb_x)
+            running_loss = 0.
+
+    return last_loss       
 
 
 

@@ -195,86 +195,153 @@ class PPRecDataLoader(NewsrecDataLoader):
         #print("BATCHY:",batch_y)
         # =>
         if self.eval_mode:
-            #print(batch_X.columns)
-            repeats_title = np.array(batch_X["title_n_samples"])
-            repeats_entity = np.array(batch_X["ner_clusters_text_n_samples"])
-            repeats_ctr = np.array(batch_X["ctr_n_samples"])
-            repeats_popularity = np.array(batch_X["popularity_n_samples"])
-            # =>
-            # print("Before shape:",batch_y)
-            #cnt=0
-            # for item1 in batch_y:
-            #     for item2 in item1:
-            #         cnt+=1
-            # batch_y = np.array(batch_y.explode().to_list()).reshape(-1, 1)
-            # print("After shape:",batch_y.shape)
-            # print("Count:",cnt)
-            # =>
             
-            # =>
-            his_input_title = repeat_by_list_values_from_matrix(
-                batch_X[self.title_prefix + self.history_column].to_list(),
-                matrix=self.lookup_article_matrix,
-                repeats=repeats_title,
-            )
-            his_input_recency = np.array (
-                batch_X[self.title_prefix + self.history_recency].explode().to_list()
-            )
+            # repeats_title = np.array(batch_X["title_n_samples"])
+            # repeats_entity = np.array(batch_X["ner_clusters_text_n_samples"])
+            # repeats_ctr = np.array(batch_X["ctr_n_samples"])
+            # repeats_popularity = np.array(batch_X["popularity_n_samples"])
             
+            # his_input_title = repeat_by_list_values_from_matrix(
+            #     batch_X[self.title_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix,
+            #     repeats=repeats_title,
+            # )
+            # pred_input_title = self.lookup_article_matrix[
+            #     batch_X[self.title_prefix + self.inview_col].explode().to_list()
+            # ]
 
-            # =>
-            pred_input_title = self.lookup_article_matrix[
-                batch_X[self.title_prefix + self.inview_col].explode().to_list()
-            ]
-            pred_input_recency = np.array(
-            batch_X[self.title_prefix + self.inview_recency].explode().to_list()
-            )
+
+            
         
 
-            his_input_entity = repeat_by_list_values_from_matrix(
-                batch_X[self.entity_prefix + self.history_column].to_list(),
-                matrix=self.lookup_article_matrix,
-                repeats=repeats_entity,
-            )
-            # # =>
-            pred_input_entity = self.lookup_article_matrix[
-                batch_X[self.entity_prefix + self.inview_col].explode().to_list()
-            ]
-           
-            his_input_ctr = repeat_by_list_values_from_matrix(
-                batch_X[self.ctr_prefix + self.history_column].to_list(),
-                matrix=self.lookup_article_matrix_ctr,
-                repeats=repeats_ctr,
-            )
+            # his_input_entity = repeat_by_list_values_from_matrix(
+            #     batch_X[self.entity_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix_entity,
+            #     repeats=repeats_entity,
+            # )
 
-            his_input_pop = repeat_by_list_values_from_matrix(
-                batch_X[self.pop_prefix + self.history_column].to_list(),
-                matrix=self.lookup_article_matrix_pop,
-                repeats=repeats_popularity,
-            )
+            # pred_input_entity = self.lookup_article_matrix_entity[
+            #     batch_X[self.entity_prefix + self.inview_col].explode().to_list()
+            # ]
+
+            # his_input_ctr = repeat_by_list_values_from_matrix(
+            #     batch_X[self.ctr_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix_ctr,
+            #     repeats=repeats_ctr,
+            # )
 
 
-            # # =>
-            pred_input_ctr = self.lookup_article_matrix_ctr[
-                batch_X[self.ctr_prefix + self.inview_col].explode().to_list()
-            ]
-            pred_input_pop = self.lookup_article_matrix_pop[
-                batch_X[self.pop_prefix + self.inview_col].explode().to_list()
-            ]
+            # pred_input_ctr = self.lookup_article_matrix_ctr[
+            #     batch_X[self.ctr_prefix + self.inview_col].explode().to_list()
+            # ]
            
+            
+            # his_input_pop = repeat_by_list_values_from_matrix(
+            #     batch_X[self.pop_prefix + self.history_column].to_list(),
+            #     matrix=self.lookup_article_matrix_pop,
+            #     repeats=repeats_popularity,
+            # )
+
+            # pred_input_pop = self.lookup_article_matrix_pop[
+            #     batch_X[self.pop_prefix + self.inview_col].explode().to_list()
+            # ]
            
+
+
+            # his_input_recency = np.array (
+            #     batch_X[self.title_prefix + self.history_recency].explode().to_list()
+            # )
+            # his_input_recency = np.expand_dims(his_input_recency, axis=1)
+            # print("Hist Recency:",his_input_recency.shape)
+            
+            # pred_input_recency = np.array(
+            # batch_X[self.title_prefix + self.inview_recency].explode().to_list()
+            # )
+            # pred_input_recency = np.expand_dims(pred_input_recency, axis=1)
+
+            # print("Pred Recency:",pred_input_recency.shape)
+           
+            # his_input_title = np.squeeze(
+            #     his_input_title, axis=2
+            #     )
+                
+            # his_input_entity = np.squeeze(
+            #         his_input_entity, axis=2
+            #         )
+            #print(batch_y.shape)
+            
+
+
+            batch_y = np.array(batch_y.to_list())
+            
+            his_input_title = np.array(
+                batch_X[self.title_prefix + self.history_column].to_list()
+            )
+            his_input_entity = np.array(
+                batch_X[self.entity_prefix + self.history_column].to_list()
+            )
+            his_input_ctr = np.array(
+                batch_X[self.ctr_prefix + self.history_column].to_list()
+            )
+            his_input_recency = np.array(
+                batch_X[self.title_prefix +self.history_recency].to_list()
+            )
+            his_input_pop = np.array(
+                batch_X[self.pop_prefix + self.history_column].to_list()
+            )
+
+            
+            
+            pred_input_title = np.array(
+                batch_X[self.title_prefix + self.inview_col].to_list()
+            )
+            #print("GGGGG:",pred_input_title.shape)
+            pred_input_entity = np.array(
+                batch_X[self.entity_prefix + self.inview_col].to_list()
+            )
+            pred_input_ctr = np.array(
+                batch_X[self.ctr_prefix + self.inview_col].to_list()
+            )
+            pred_input_recency = np.array(
+                batch_X[self.title_prefix + self.inview_recency].to_list()
+            )
+            pred_input_pop = np.array(
+                batch_X[self.pop_prefix + self.inview_col].to_list()
+            )
+            
+            
+            pred_input_title = np.squeeze(
+                self.lookup_article_matrix[pred_input_title], axis=2
+            )
+            #print("HHHHH:",pred_input_title.shape)
+            #print(pred_input_entity.shape)
+            pred_input_entity = np.squeeze(
+                self.lookup_article_matrix_entity[pred_input_entity], axis=2
+            )
+            #print(pred_input_entity.shape)
+            #print(pred_input_ctr.shape)
+            
+            
+            
+            
+           
+            
             his_input_title = np.squeeze(
-                his_input_title, axis=2
+                self.lookup_article_matrix[his_input_title], axis=2
                 )
                 
             his_input_entity = np.squeeze(
-                    his_input_entity, axis=2
+                    self.lookup_article_matrix_entity[his_input_entity], axis=2
                     )
+            pred_input_ctr = np.squeeze(
+                    pred_input_ctr,axis=2
+                )
             
             
             
 
         else:
+            
             batch_y = np.array(batch_y.to_list())
             
             his_input_title = np.array(
