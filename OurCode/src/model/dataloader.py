@@ -78,6 +78,7 @@ class PPRecDataLoader(NewsrecDataLoader):
     # unknown_subcategory_value: int = 0
     entity_mapping: dict[int, list[int]] = None
     ctr_mapping: dict[int, int] = None
+    popularity_mapping: dict[int, int] = None
    
     # subcategory_mapping: dict[int, int] = None
 
@@ -85,6 +86,7 @@ class PPRecDataLoader(NewsrecDataLoader):
         self.title_prefix = "title_"
         self.entity_prefix = "ner_clusters_text_"
         self.ctr_prefix = "ctr_"
+        self.pop_prefix = "popularity_"
         # self.subcategory_prefix = "subcategory_"
         (
             self.lookup_article_index_entity,
@@ -98,6 +100,13 @@ class PPRecDataLoader(NewsrecDataLoader):
             self.lookup_article_matrix_ctr,
         ) = create_lookup_objects(
             self.ctr_mapping, unknown_representation=self.unknown_representation,is_array=False
+        )
+
+        (
+            self.lookup_article_index_pop,
+            self.lookup_article_matrix_pop,
+        ) = create_lookup_objects(
+            self.popularity_mapping, unknown_representation=self.unknown_representation,is_array=False
         )
         # if self.eval_mode:
         #     raise ValueError("'eval_mode = True' is not implemented for NAML")
@@ -140,13 +149,26 @@ class PPRecDataLoader(NewsrecDataLoader):
         ctr = df.pipe(
             map_list_article_id_to_value,
             behaviors_column=self.history_column,
-            mapping=self.ctr_mapping,
+            mapping=self.lookup_article_index_ctr,
             fill_nulls=0,
             drop_nulls=False,
         ).pipe(
             map_list_article_id_to_value,
             behaviors_column=self.inview_col,
-            mapping=self.ctr_mapping,
+            mapping=self.lookup_article_index_ctr,
+            fill_nulls=0,
+            drop_nulls=False,
+        )
+        popularity = df.pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.history_column,
+            mapping=self.lookup_article_index_pop,
+            fill_nulls=0,
+            drop_nulls=False,
+        ).pipe(
+            map_list_article_id_to_value,
+            behaviors_column=self.inview_col,
+            mapping=self.lookup_article_index_pop,
             fill_nulls=0,
             drop_nulls=False,
         )
@@ -157,6 +179,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             .with_columns(title.select(pl.all().name.prefix(self.title_prefix)))
             .with_columns(entities.select(pl.all().name.prefix(self.entity_prefix)))
             .with_columns(ctr.select(pl.all().name.prefix(self.ctr_prefix)))
+            .with_columns(popularity.select(pl.all().name.prefix(self.pop_prefix)))
             )
         
         #print(transformed_df.columns)
@@ -176,6 +199,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             repeats_title = np.array(batch_X["title_n_samples"])
             repeats_entity = np.array(batch_X["ner_clusters_text_n_samples"])
             repeats_ctr = np.array(batch_X["ctr_n_samples"])
+            repeats_popularity = np.array(batch_X["popularity_n_samples"])
             # =>
             # print("Before shape:",batch_y)
             #cnt=0
@@ -222,9 +246,20 @@ class PPRecDataLoader(NewsrecDataLoader):
                 matrix=self.lookup_article_matrix_ctr,
                 repeats=repeats_ctr,
             )
+
+            his_input_pop = repeat_by_list_values_from_matrix(
+                batch_X[self.pop_prefix + self.history_column].to_list(),
+                matrix=self.lookup_article_matrix_pop,
+                repeats=repeats_popularity,
+            )
+
+
             # # =>
             pred_input_ctr = self.lookup_article_matrix_ctr[
                 batch_X[self.ctr_prefix + self.inview_col].explode().to_list()
+            ]
+            pred_input_pop = self.lookup_article_matrix_pop[
+                batch_X[self.pop_prefix + self.inview_col].explode().to_list()
             ]
            
            
@@ -254,6 +289,10 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_recency = np.array(
                 batch_X[self.title_prefix +self.history_recency].to_list()
             )
+            his_input_pop = np.array(
+                batch_X[self.pop_prefix + self.history_column].to_list()
+            )
+
             
             
             pred_input_title = np.array(
@@ -267,6 +306,9 @@ class PPRecDataLoader(NewsrecDataLoader):
             )
             pred_input_recency = np.array(
                 batch_X[self.title_prefix + self.inview_recency].to_list()
+            )
+            pred_input_pop = np.array(
+                batch_X[self.pop_prefix + self.inview_col].to_list()
             )
             
             
@@ -300,10 +342,12 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_entity,
             his_input_ctr,
             his_input_recency,
+            his_input_pop,
             pred_input_title,
             pred_input_entity,
             pred_input_ctr,
-            pred_input_recency
+            pred_input_recency,
+            pred_input_pop
         ), batch_y
         
         #print("FIANL_X",final_X[0].shape)

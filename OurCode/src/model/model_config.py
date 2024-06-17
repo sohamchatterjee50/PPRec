@@ -117,9 +117,18 @@ class hparams_pprec:
     loss: str = "cross_entropy_loss"
     dropout: float = 0.2
     learning_rate: float = 0.0001
-    head_num: int = 8
+    head_num: int = 4
     head_dim: int = 768
     embed_dim: int = 6144
+    max_clicked: int = 8
+    m_size: int = 256
+    p_size: int = 2
+    weight_size: int = 258
 
-PPRConfig = {}
-CPJAConfig = {}
+
+class PPRConfig:
+    pass
+
+
+
+
