@@ -206,19 +206,28 @@ class TimeAwarePopularityEncoder(nn.Module):
 
     def forward(self,news, recency, ctr):
         news_tensor = torch.tensor(news)
+        #print(news_tensor.shape)
         recency_tensor = torch.tensor(recency)
         ctr_tensor = torch.tensor(ctr)
+        #ctr_tensor = torch.repeat_interleave(ctr_tensor,news_tensor.shape[2] , dim=1)
+        #ctr_tensor = torch.reshape(ctr_tensor,(ctr_tensor.shape[0],news_tensor.shape[1],news_tensor.shape[2]))
         news_embed = self.word2vec(news_tensor)
         recency_embed = self.word2vec(recency_tensor)
         ctr_embed = self.word2vec(ctr_tensor)
         content_score = self.news_model(news_embed)
         recency_score = self.recency_model(recency_embed)
         recency_tensor = recency_tensor.unsqueeze(-1)
+
         combined_input = torch.cat([news_tensor,recency_tensor],2)
         combined_input = combined_input.to(torch.float32)
+
         combined_score = self.gate(combined_input)
         final_content_score = content_score.squeeze(-1)
         final_content_score = self.dense(final_content_score)
+        # print(final_content_score.shape)
+        # print(combined_score.shape)
+        # print(recency_score.shape)
+        
         # print("ALL:",combined_score.shape)
         # print("CONTENT:",final_content_score.shape)
         # print("RECENCY:",recency_score.shape)
