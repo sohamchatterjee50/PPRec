@@ -54,7 +54,7 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         )
 
     def forward(
-        self, n: torch.Tensor, recencies: torch.Tensor, crt: torch.Tensor
+        self, n: torch.Tensor, recencies: torch.Tensor, ctr: torch.Tensor
     ) -> torch.Tensor:
         r"""
 
@@ -83,12 +83,12 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
         batch_size, n_size = n.size()
         assert recencies.size(0) == batch_size
         assert n_size == self.size_n
-        assert crt.max() <= 1.0 and crt.min() >= 0.0
-        assert crt.dtype == torch.float32 or crt.dtype == torch.float64
+        assert ctr.max() <= 1.0 and ctr.min() >= 0.0
+        assert ctr.dtype == torch.float32 or ctr.dtype == torch.float64
 
         r = self.recency_embedding(recencies)  # (batch_size, r_size)
         assert len(r.size()) == 2
-        assert r.size(1) == self.size_r
+        assert r.size(1) == self.r_size
         assert r.size(0) == batch_size
 
         pr = self.recency_based_popularity_dense(r)  # (batch_size)
@@ -109,7 +109,7 @@ class TimeAwareNewsPopularityPredictor(nn.Module):
 
         # In their code this would just be `sp = crt + self.wp * p`
         # they leave out the second parameter weight.
-        sp = self.wc * crt + self.wp * p  # (batch_size)
+        sp = self.wc * ctr + self.wp * p  # (batch_size)
         assert len(sp.size()) == 1
         assert sp.size(0) == batch_size
 
@@ -125,6 +125,13 @@ class REConfig:
     # In their code this is 1500 I think
     # check `time_embedding_layer` in `Encoders.create_pe_model`
     max_recency: int
+
+    # In their dataloader, they devide the number of hours by
+    # two, so every recency step is a step of two hours. This
+    # represents that factor of two, but configurable in the model
+    # instead of the dataloader. So the default would be 0.5 here,
+    # if you use their division by two.
+    recency_factor: float
 
 
 class RecencyEmbedding(nn.Module):
@@ -150,19 +157,19 @@ class RecencyEmbedding(nn.Module):
 
         recency is a tensor of shape (batch_size) that contains the recencies (the
         hours since the news article was published, to the time of prediction) for
-        each news article in the batch. These are rounded to the nearest hour, so
-        an integer. In their dataloader, they have divided these hours by two making
-        every recency step a step of two hours. But the idea stays the same. Its
-        correlated with the number of hours.
+        each news article in the batch. In their dataloader, they have divided these
+        hours by two making every recency step a step of two hours. Thats our recency
+        factor.
 
         """
 
         assert recency.dim() == 1
-        assert recency.dtype == torch.int64 or recency.dtype == torch.int32
+
+        recency_factored = torch.floor(recency * self.config.recency_factor).long()
 
         # The embedding has a maximum value for which it can be used, so we clip
         # the recency to that value.
-        recency_clipped = torch.clamp(recency, max=self.config.max_recency - 1)
+        recency_clipped = torch.clamp(recency_factored, max=self.config.max_recency - 1)
 
         r = self.embedding(recency_clipped)  # (batch_size, r_size)
         assert len(r.size()) == 2
@@ -212,7 +219,12 @@ class RecencyBasedPopularityDense(nn.Module):
         batch_size, r_size = r.size()
         assert r_size == self.r_size
 
-        pr = self.dense(r)  # (batch_size)
+        pr = self.dense(r)  # (batch_size, 1)
+        assert len(pr.size()) == 2
+        assert pr.size(0) == batch_size
+        assert pr.size(1) == 1
+
+        pr = pr.squeeze()  # (batch_size)
         assert len(pr.size()) == 1
         assert pr.size(0) == batch_size
 
@@ -260,7 +272,12 @@ class ContentBasedPopularityDense(nn.Module):
         batch_size, n_size = n.size()
         assert n_size == self.n_size
 
-        pc = self.dense(n)  # (batch_size)
+        pc = self.dense(n)  # (batch_size, 1)
+        assert len(pc.size()) == 2
+        assert pc.size(0) == batch_size
+        assert pc.size(1) == 1
+
+        pc = pc.squeeze()  # (batch_size)
         assert len(pc.size()) == 1
         assert pc.size(0) == batch_size
 

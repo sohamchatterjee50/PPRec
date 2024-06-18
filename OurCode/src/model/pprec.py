@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from torch import nn
 import torch
+import numpy as np
 
 from .news_encoder import (
     KnowledgeAwareNewsEncoder,
@@ -98,8 +99,40 @@ class PPRec(nn.Module):
             size_u=config.user_encoder_config.get_size_u(),
         )
 
+    # Note: in these inputs there is no dimension for the 'npfactor'
+    # but we can just reshape the batch_size to facilitate to these
+    # dimensions. Makes no difference, and this makes a lot more sense.
+
+    @dataclass
+    class CandidateBatch:
+        # np array of size (batch_size)
+        # article ids for every article
+        ids: np.ndarray
+
+        # tensor of shape (batch_size)
+        # click-through rate for every article (0-1)
+        ctr: torch.Tensor
+
+        # tensor of shape (batch_size)
+        # recency for every article
+        # the number of hours since the article was published
+        recencies: torch.Tensor
+
+    @dataclass
+    class ClicksBatch:
+
+        # np array of shape (batch_size, max_clicked)
+        # article id for every article
+        ids: np.ndarray
+
+        # tensor of shape (batch_size, max_clicked)
+        # click-through rate for every article (0-1)
+        ctr: torch.Tensor
+
     def forward(
         self,
+        clicks: ClicksBatch,
+        candidates: CandidateBatch,
     ):
         """
 
@@ -108,7 +141,100 @@ class PPRec(nn.Module):
 
         """
 
-        raise NotImplementedError()
+        assert len(clicks.ids.shape) == 2
+        batch_size, max_clicked = clicks.ids.shape
+        assert max_clicked == self.max_clicked
+
+        assert len(clicks.ctr.shape) == 2
+        assert clicks.ctr.shape == (batch_size, max_clicked)
+
+        assert len(candidates.ids.shape) == 1
+        assert candidates.ids.shape[0] == batch_size
+
+        assert len(candidates.ctr.shape) == 1
+        assert candidates.ctr.shape[0] == batch_size
+
+        assert len(candidates.recencies.shape) == 1
+        assert candidates.recencies.shape[0] == batch_size
+
+        # First we get all news embeddings n
+
+        candidate_n_for_user_comparison = self.user_news_encoder(
+            candidates.ids
+        )  # (batch_size, size_n)
+        assert len(candidate_n_for_user_comparison.shape) == 2
+        assert candidate_n_for_user_comparison.shape[0] == batch_size
+        assert candidate_n_for_user_comparison.shape[1] == self.user_size_n
+
+        candidate_n_for_popularity = self.popularity_news_encoder(
+            candidates.ids
+        )  # (batch_size, size_n)
+        assert len(candidate_n_for_popularity.shape) == 2
+        assert candidate_n_for_popularity.shape[0] == batch_size
+        assert candidate_n_for_popularity.shape[1] == self.popularity_size_n
+
+        clicks_input_news = clicks.ids.reshape(-1)  # (batch_size * max_clicked)
+        assert len(clicks_input_news.shape) == 1
+        assert clicks_input_news.shape[0] == batch_size * max_clicked
+
+        clicks_n_for_user_comparison = self.user_news_encoder(
+            clicks_input_news
+        )  # (batch_size * max_clicked, size_n)
+        assert len(clicks_n_for_user_comparison.shape) == 2
+        assert clicks_n_for_user_comparison.shape[0] == batch_size * max_clicked
+        assert clicks_n_for_user_comparison.shape[1] == self.user_size_n
+
+        clicks_n_for_user_comparison = clicks_n_for_user_comparison.reshape(
+            batch_size, max_clicked, -1
+        )  # (batch_size, max_clicked, size_n)
+        assert len(clicks_n_for_user_comparison.shape) == 3
+        assert clicks_n_for_user_comparison.shape[0] == batch_size
+        assert clicks_n_for_user_comparison.shape[1] == max_clicked
+        assert clicks_n_for_user_comparison.shape[2] == self.user_size_n
+
+        # Then we create the personalized matching score sm
+
+        user_embedding = self.user_encoder(
+            n=clicks_n_for_user_comparison, ctr=clicks.ctr
+        )  # (batch_size, size_u)
+        assert len(user_embedding.shape) == 2
+        assert user_embedding.shape[0] == batch_size
+        assert user_embedding.shape[1] == self.user_encoder.size_u
+
+        # size u should be the same as size n, is already enforced I think but to be sure
+        assert user_embedding.shape[1] == candidate_n_for_user_comparison.shape[1]
+        assert user_embedding.shape[1] == self.user_size_n
+
+        # dot product over last dimension
+        personalized_matching_score = torch.sum(
+            user_embedding * candidate_n_for_user_comparison, dim=-1
+        )  # (batch_size)
+        assert len(personalized_matching_score.shape) == 1
+        assert personalized_matching_score.shape[0] == batch_size
+
+        # Then we create the popularity score
+
+        popularity_score = self.popularity_predictor(
+            n=candidate_n_for_popularity,
+            ctr=candidates.ctr,
+            recencies=candidates.recencies,
+        )  # (batch_size)
+        assert len(popularity_score.shape) == 1
+        assert popularity_score.shape[0] == batch_size
+
+        # Then we create the personalized aggregator gate value eta
+
+        eta = self.aggregator_gate(user_embedding)  # (batch_size)
+        assert len(eta.size()) == 1
+        assert eta.size(0) == batch_size
+
+        # Then the final score
+
+        final_score = eta * personalized_matching_score + (1 - eta) * popularity_score
+        assert len(final_score.size()) == 1
+        assert final_score.size(0) == batch_size
+
+        return final_score, personalized_matching_score, popularity_score
 
 
 @dataclass
@@ -132,6 +258,7 @@ class PersonalizedAggregatorGate(nn.Module):
         super().__init__()
 
         self.config = config
+        self.size_u = size_u
 
         self.linear = nn.Linear(size_u, 1)
 

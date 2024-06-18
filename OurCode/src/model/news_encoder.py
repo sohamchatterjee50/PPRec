@@ -203,10 +203,12 @@ class LookupNewsEncoder(nn.Module):
         self.config = config
         self.device = device
 
-    def forward(self, article_ids: list[int]) -> torch.Tensor:
+    def forward(self, article_ids: np.ndarray) -> torch.Tensor:
         """
 
         Returns n (the news encodings) for a batch of articles.
+
+        article_ids is a numpy array of size (batch_size)
 
         n has shape (batch_size, embedding_size),
 
@@ -236,10 +238,12 @@ class LookupNewsEncoder(nn.Module):
 
         return embeddings  # type: ignore
 
-    def get_embeddings_batch(self, article_ids: list[int]) -> np.ndarray:
+    def get_embeddings_batch(self, article_ids: np.ndarray) -> np.ndarray:
         """
 
         Gets the embeddings for a batch of article ids.
+
+        The article ids are a numpy array of size (batch_size)
 
         The embeddings are a numpy array of size (batch_size, 768)
         except for the word2vec model where the size is (batch_size, 300)

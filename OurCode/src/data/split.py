@@ -124,7 +124,9 @@ class EBNeRDSplit:
         # In the articlestotal_inviews, total_pageviews and total_read_time are supposed
         # to be integers looking at the data, but they are floats in the parquet file.
         # Note that I had to use the Int64 type, because it contains NaN values.
-        self._articles["total_inviews"] = self._articles["total_inviews"].astype("Int64")
+        self._articles["total_inviews"] = self._articles["total_inviews"].astype(
+            "Int64"
+        )
         self._articles["total_pageviews"] = self._articles["total_pageviews"].astype(
             "Int64"
         )
@@ -260,6 +262,16 @@ class EBNeRDSplit:
         behavior = self._behaviors.loc[impression_id].to_dict()
         return Behavior.model_validate(behavior)
 
+    def get_behaviour_by_idx(self, idx: int) -> Behavior:
+        """
+
+        Returns the behavior of the given impression_id.
+
+        """
+
+        behavior = self._behaviors.iloc[idx].to_dict()
+        return Behavior.model_validate(behavior)
+
     def get_history(self, user_id: int) -> History:
         """
 
@@ -272,7 +284,8 @@ class EBNeRDSplit:
         # impression_time_fixed are np.datetime64 objects, which don't work with pydantic
         # so we convert them to datetime objects
         history["impression_time_fixed"] = [
-            pd.Timestamp(date).to_pydatetime() for date in history["impression_time_fixed"]
+            pd.Timestamp(date).to_pydatetime()
+            for date in history["impression_time_fixed"]
         ]
 
         return History.model_validate(history)

@@ -60,6 +60,7 @@ class PopularityAwareUserEncoder(nn.Module):
         self.size_m = config.news_self_attention_config.get_size_m()
         self.size_p = config.popularity_embedding_config.size_p
         self.size_u = config.get_size_u()
+        self.size_n = size_n
         self.max_clicked = max_clicked
 
         self.popularity_embedding = PopularityEmbedding(
@@ -198,7 +199,7 @@ class PopularityEmbedding(nn.Module):
         p = self.embedding(ctr_clipped)  # (batch_size, max_clicked, p_size)
         assert p.size(0) == batch_size
         assert p.size(1) == max_clicked
-        assert p.size(2) == self.p_size
+        assert p.size(2) == self.config.size_p
 
         return p
 
