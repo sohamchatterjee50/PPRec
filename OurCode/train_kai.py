@@ -3,12 +3,15 @@ from transformers import AutoTokenizer, AutoModel
 from pathlib import Path
 # import tensorflow as tf
 import polars as pl
+import math
 #ADD THIS TO THE PATH
 print("Adding path")
 import os 
 import os
 cwd = os.getcwd()
 print(cwd)
+from testing_network import *
+from ebrec.evaluation import MetricEvaluator, AucScore, NdcgScore, MrrScore
 # sys.path.insert(0, '/home/apatra/Rec/contest/PPRec/OurCode/src/Ad_kai/ebnerd-benchmark/examples/00_quick_start')
 
 # print("lets go")
@@ -132,7 +135,7 @@ transformer_tokenizer = AutoTokenizer.from_pretrained(TRANSFORMER_MODEL_NAME)
 
 # We'll init the word embeddings using the
 word2vec_embedding = get_transformers_word_embeddings(transformer_model)
-print("help",word2vec_embedding)
+# print("help",word2vec_embedding)
 #
 df_articles, cat_cal = concat_str_columns(df_articles, columns=TEXT_COLUMNS_TO_USE)
 # print("Hurricane",df_articles.head())
@@ -157,7 +160,8 @@ for i in article_mapping.keys():
 
 
 
-print("hurricane 3")
+print("hurricane 3",word2vec_embedding.shape)
+
 
 
 train_dataloader = NRMSDataLoader(
@@ -177,5 +181,68 @@ val_dataloader = NRMSDataLoader(
     batch_size=32,
 )
 
-for x,y in train_dataloader:
-    print(x[0].shape,x[1].shape,y.shape)
+config1=NewsEnc_config()
+config2=Popularity_config()
+config3=Userenc_config()
+config4=General_Config()
+
+
+model=PPREC(config4,config2,config3,config1,torch.tensor(word2vec_embedding)).cuda()
+
+
+
+
+
+
+
+criterion=nn.CrossEntropyLoss()
+optimizer=torch.optim.SGD([
+                {'params': model.parameters(), 'lr': 1e-2},
+            ], lr=1e-3, momentum=0.9)
+
+for i in range(50):
+    for x,y in train_dataloader:
+        # print(x[0].shape,x[1].shape,y.shape)
+        logits=model(torch.tensor(x[1]).long().cuda(),torch.tensor(x[0]).long().cuda())
+        loss=criterion(logits,torch.argmax(torch.tensor(y),1).cuda())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        break
+
+labels=[]
+pred=[]
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+print("Numberof Params",count_parameters(model))
+
+model.PN_ratio=1
+for x,y in val_dataloader:
+    for z in range(math.ceil(x[0].shape[0]/73)):
+        a0=x[0][z*73:(z+1)*73,:,:]
+        a1=x[1][z*73:(z+1)*73,:,:]
+
+        print(a0.shape,a1.shape)
+        scores=model(torch.tensor(a1).long().cuda(),torch.tensor(a0).long().cuda())
+        # scores=torch.zeros(x[0].shape[0],1)
+        pred.append(scores.detach().cpu())
+    # break
+
+# labels=torch.cat(labels,0)
+pred_validation=torch.cat(pred,0).squeeze()
+print("hola",pred_validation.shape)
+
+df_validation = add_prediction_scores(df_validation, pred_validation.tolist()).pipe(
+    add_known_user_column, known_users=df_train[DEFAULT_USER_COL]
+)
+print(df_validation.head(2))
+
+metrics = MetricEvaluator(
+    labels=df_validation["labels"].to_list(),
+    predictions=df_validation["scores"].to_list(),
+    metric_functions=[AucScore(), MrrScore(), NdcgScore(k=5), NdcgScore(k=10)],
+)
+metrics.evaluate()
+
+print(metrics)
