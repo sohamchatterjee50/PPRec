@@ -196,9 +196,9 @@ class LookupNewsEncoder(nn.Module):
 
         news_embedding_size = config.get_size_n()
 
-        self.fcout = nn.Linear(
-            _embedding_size_from_model(config.model), news_embedding_size
-        )
+        self.embedding_size = _embedding_size_from_model(config.model)
+
+        self.fcout = nn.Linear(self.embedding_size, news_embedding_size)
 
         self.config = config
         self.device = device
@@ -207,6 +207,7 @@ class LookupNewsEncoder(nn.Module):
         """
 
         Returns n (the news encodings) for a batch of articles.
+        Fills embeddings that werent found with zeros
 
         article_ids is a numpy array of size (batch_size)
 
@@ -215,6 +216,7 @@ class LookupNewsEncoder(nn.Module):
         """
 
         embeddings = self.get_embeddings_batch(article_ids)
+
         embeddings = torch.tensor(embeddings, dtype=torch.float32, device=self.device)
 
         n = self.fcout(embeddings)  # (batch_size, embedding_size)
@@ -234,9 +236,13 @@ class LookupNewsEncoder(nn.Module):
 
         """
 
-        embeddings = self.data.loc[article_id, "embeddings"]
+        if article_id == 0:
+            return np.zeros(self.embedding_size)
 
-        return embeddings  # type: ignore
+        embeddings = self.data.loc[article_id, "embeddings"]
+        embeddings = np.array(embeddings)
+
+        return embeddings
 
     def get_embeddings_batch(self, article_ids: np.ndarray) -> np.ndarray:
         """
@@ -250,8 +256,9 @@ class LookupNewsEncoder(nn.Module):
 
         """
 
-        embeddings = self.data.loc[article_ids, "embeddings"]
-        embeddings = np.stack(embeddings)  # type: ignore
+        embeddings = np.array(
+            [self.get_embeddings(article_id) for article_id in article_ids]
+        )
 
         return embeddings
 
