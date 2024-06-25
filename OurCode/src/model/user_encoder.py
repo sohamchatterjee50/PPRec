@@ -23,13 +23,6 @@ class PAUEConfig:
     news_self_attention_config: "NSAConfig"
     content_popularity_joint_attention_config: "CPJAConfig"
 
-    def get_size_u(self) -> int:
-
-        # The size of the user interest embeddings u is the same as the size of the
-        # contextual news representations m, since its a scaled and summed version of
-        # it.
-        return self.news_self_attention_config.get_size_m()
-
 
 class PopularityAwareUserEncoder(nn.Module):
     """
@@ -57,9 +50,7 @@ class PopularityAwareUserEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        self.size_m = config.news_self_attention_config.get_size_m()
         self.size_p = config.popularity_embedding_config.size_p
-        self.size_u = config.get_size_u()
         self.size_n = size_n
         self.max_clicked = max_clicked
 
@@ -73,7 +64,7 @@ class PopularityAwareUserEncoder(nn.Module):
         )
         self.content_popularity_joint_attention = ContentPopularityJointAttention(
             max_clicked=max_clicked,
-            m_size=self.size_m,
+            n_size=self.size_n,
             p_size=self.size_p,
             config=config.content_popularity_joint_attention_config,
         )
@@ -111,16 +102,16 @@ class PopularityAwareUserEncoder(nn.Module):
         assert p.size(1) == max_clicked
         assert p.size(2) == self.size_p
 
-        m = self.news_self_attention(n)  # (batch_size, max_clicked, size_m)
+        m = self.news_self_attention(n)  # (batch_size, max_clicked, size_n)
         assert len(m.size()) == 3
         assert m.size(0) == batch_size
         assert m.size(1) == max_clicked
-        assert m.size(2) == self.size_m
+        assert m.size(2) == self.size_n
 
-        u = self.content_popularity_joint_attention(m, p)  # (batch_size, size_u)
+        u = self.content_popularity_joint_attention(m, p)  # (batch_size, size_n)
         assert len(u.size()) == 2
         assert u.size(0) == batch_size
-        assert u.size(1) == self.size_u
+        assert u.size(1) == self.size_n
 
         return u
 
@@ -211,9 +202,6 @@ class NSAConfig:
     n_attention_heads: int
     head_output_size: int
 
-    def get_size_m(self) -> int:
-        return self.n_attention_heads * self.head_output_size
-
 
 class NewsSelfAttention(nn.Module):
     """
@@ -226,20 +214,25 @@ class NewsSelfAttention(nn.Module):
     def __init__(self, n_size: int, max_clicked: int, config: NSAConfig):
         super().__init__()
 
-        # The output size of the matrix should be the same as the
-        # size of the news embeddings, since this is just the value
-        # embeddings size in the self-attention mechanism.
-        W_width = n_size
+        size_u = config.n_attention_heads * config.head_output_size
 
         # In their code, they use some kind of glorot initialization
         # lets fix that later, for now we just use random initialization
-        self.Wq = nn.Parameter(torch.rand(n_size, W_width))
-        self.Wk = nn.Parameter(torch.rand(n_size, W_width))
-        self.Wv = nn.Parameter(torch.rand(n_size, W_width))
+        self.Wq = nn.Parameter(torch.rand(n_size, size_u))
+        self.Wk = nn.Parameter(torch.rand(n_size, size_u))
+        self.Wv = nn.Parameter(torch.rand(n_size, size_u))
+
+        # Dense layer to bring the output of the self-attention
+        # back to the original size of the news embeddings. Not used
+        # in the paper, but this allows us to use different number of
+        # heads and head output sizes, without having to change the
+        # size of the news embeddings.
+        self.output_dense = nn.Linear(size_u, n_size)
 
         self.config = config
         self.n_size = n_size
         self.max_clicked = max_clicked
+        self.size_u = size_u
 
     def forward(self, n: torch.Tensor) -> torch.Tensor:
         """
@@ -257,23 +250,23 @@ class NewsSelfAttention(nn.Module):
         assert n_size == self.n_size
         assert max_clicked == self.max_clicked
 
-        q = torch.matmul(n, self.Wq)  # (batch_size, max_clicked, n_size)
+        q = torch.matmul(n, self.Wq)  # (batch_size, max_clicked, size_u)
         assert len(q.size()) == 3
         assert q.size(0) == batch_size
         assert q.size(1) == max_clicked
-        assert q.size(2) == self.n_size
+        assert q.size(2) == self.size_u
 
-        k = torch.matmul(n, self.Wk)  # (batch_size, max_clicked, n_size)
+        k = torch.matmul(n, self.Wk)  # (batch_size, max_clicked, size_u)
         assert len(k.size()) == 3
         assert k.size(0) == batch_size
         assert k.size(1) == max_clicked
-        assert k.size(2) == self.n_size
+        assert k.size(2) == self.size_u
 
-        v = torch.matmul(n, self.Wv)  # (batch_size, max_clicked, n_size)
+        v = torch.matmul(n, self.Wv)  # (batch_size, max_clicked, size_u)
         assert len(v.size()) == 3
         assert v.size(0) == batch_size
         assert v.size(1) == max_clicked
-        assert v.size(2) == self.n_size
+        assert v.size(2) == self.size_u
 
         q = q.view(
             batch_size,
@@ -385,12 +378,20 @@ class NewsSelfAttention(nn.Module):
 
         # I have to use reshape here, the data is not contiguous in memory...
         m = m.reshape(
-            batch_size, max_clicked, self.config.get_size_m()
+            batch_size,
+            max_clicked,
+            self.config.head_output_size * self.config.n_attention_heads,
         )  # (batch_size, max_clicked, head_output_size * n_attention_heads)
         assert len(m.size()) == 3
         assert m.size(0) == batch_size
         assert m.size(1) == max_clicked
-        assert m.size(2) == self.config.get_size_m()
+        assert m.size(2) == self.config.head_output_size * self.config.n_attention_heads
+
+        m = self.output_dense(m)  # (batch_size, max_clicked, n_size)
+        assert len(m.size()) == 3
+        assert m.size(0) == batch_size
+        assert m.size(1) == max_clicked
+        assert m.size(2) == self.n_size
 
         return m
 
@@ -413,7 +414,7 @@ class ContentPopularityJointAttention(nn.Module):
 
     """
 
-    def __init__(self, max_clicked: int, m_size: int, p_size: int, config: CPJAConfig):
+    def __init__(self, max_clicked: int, n_size: int, p_size: int, config: CPJAConfig):
         super().__init__()
 
         # Q: should the weights be initialized randomly?
@@ -422,11 +423,11 @@ class ContentPopularityJointAttention(nn.Module):
         # Lets check in their code, or ask Songga, or do some
         # research on the topic.
 
-        self.Wu = nn.Parameter(torch.rand(config.weight_size, m_size + p_size))
+        self.Wu = nn.Parameter(torch.rand(config.weight_size, n_size + p_size))
         self.b = nn.Parameter(torch.rand(config.weight_size))
 
         self.config = config
-        self.m_size = m_size
+        self.n_size = n_size
         self.p_size = p_size
         self.max_clicked = max_clicked
 
@@ -446,7 +447,7 @@ class ContentPopularityJointAttention(nn.Module):
 
         assert len(m.size()) == 3
         batch_size, max_clicked, m_size = m.size()
-        assert m_size == self.m_size
+        assert m_size == self.n_size
         assert max_clicked == self.max_clicked
 
         assert len(p.size()) == 3
@@ -454,11 +455,11 @@ class ContentPopularityJointAttention(nn.Module):
         assert p.size(1) == max_clicked
         assert p.size(2) == self.p_size
 
-        mp = torch.cat((m, p), dim=2)  # (batch_size, max_clicked, m_size + p_size)
+        mp = torch.cat((m, p), dim=2)  # (batch_size, max_clicked, n_size + p_size)
         assert len(mp.size()) == 3
         assert mp.size(0) == batch_size
         assert mp.size(1) == max_clicked
-        assert mp.size(2) == self.m_size + self.p_size
+        assert mp.size(2) == self.n_size + self.p_size
 
         Wu_mp = torch.matmul(mp, self.Wu.T)  # (batch_size, max_clicked, weight_size)
         assert len(Wu_mp.size()) == 3
@@ -488,15 +489,15 @@ class ContentPopularityJointAttention(nn.Module):
         assert a.size(0) == batch_size
         assert a.size(1) == max_clicked
 
-        am = torch.mul(a.unsqueeze(2), m)  # (batch_size, max_clicked, m_size)
+        am = torch.mul(a.unsqueeze(2), m)  # (batch_size, max_clicked, n_size)
         assert len(am.size()) == 3
         assert am.size(0) == batch_size
         assert am.size(1) == max_clicked
-        assert am.size(2) == self.m_size
+        assert am.size(2) == self.n_size
 
-        u = torch.sum(am, dim=1)  # (batch_size, m_size)
+        u = torch.sum(am, dim=1)  # (batch_size, n_size)
         assert len(u.size()) == 2
         assert u.size(0) == batch_size
-        assert u.size(1) == self.m_size
+        assert u.size(1) == self.n_size
 
         return u

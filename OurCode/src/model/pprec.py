@@ -26,7 +26,7 @@ from .user_encoder import PopularityAwareUserEncoder, PAUEConfig
 
 from .utils import DenseConfig, dense_from_hiddens_layers
 
-from ..data.train import TrainDataPoint
+from ..data.dataset import TrainDataPoint
 
 
 @dataclass
@@ -54,6 +54,8 @@ class PPRec(nn.Module):
         # Needed by the lookup news encoder. So it can put its
         # looked up embeddings on the right device.
         device: torch.device,
+        # Used by the lookup news encoder to load the embeddings
+        data_folder: str | None,
         config: PPRConfig,
     ):
 
@@ -74,7 +76,9 @@ class PPRec(nn.Module):
             )
         elif isinstance(config.user_news_encoder_config, LNEConfig):
             self.user_news_encoder = LookupNewsEncoder(
-                config=config.user_news_encoder_config, device=device
+                config=config.user_news_encoder_config,
+                device=device,
+                data_folder=data_folder,
             )
         else:
             raise ValueError("Unknown news encoder config")
@@ -89,7 +93,9 @@ class PPRec(nn.Module):
             )
         elif isinstance(config.popularity_news_encoder_config, LNEConfig):
             self.popularity_news_encoder = LookupNewsEncoder(
-                config=config.popularity_news_encoder_config, device=device
+                config=config.popularity_news_encoder_config,
+                device=device,
+                data_folder=data_folder,
             )
         else:
             raise ValueError("Unknown news encoder config")
@@ -104,110 +110,8 @@ class PPRec(nn.Module):
         )
         self.aggregator_gate = PersonalizedAggregatorGate(
             config=config.aggregator_gate_config,
-            size_u=config.user_encoder_config.get_size_u(),
+            size_n=self.user_size_n,
         )
-
-    def preprocess_train_batch(self, batch: list[TrainDataPoint]) -> "PPRec.Inputs":
-        """
-
-        Preprocesses a batch of TrainDataPoints into the format needed for the forward
-        function. It's concat the good and bad articles into one batch.
-
-        """
-
-        batch_size = len(batch)
-        candidate_size = 2
-
-        # First we get the candidate articles
-
-        candidate_ids = np.array(
-            [
-                [point.good_article.article_id for point in batch],
-                [point.bad_article.article_id for point in batch],
-            ]
-        )
-        candidate_ids = candidate_ids.transpose(1, 0)
-
-        candidate_ctr = torch.tensor(
-            [
-                [point.good_article.ctr for point in batch],
-                [point.bad_article.ctr for point in batch],
-            ],
-            dtype=torch.float32,
-        )
-        candidate_ctr = candidate_ctr.transpose(1, 0)
-
-        candidate_recencies = torch.tensor(
-            [
-                [point.good_article.recency for point in batch],
-                [point.bad_article.recency for point in batch],
-            ],
-            dtype=torch.float32,
-        )
-        candidate_recencies = candidate_recencies.transpose(1, 0)
-
-        assert candidate_ids.shape == (batch_size, candidate_size)
-        assert candidate_ctr.shape == (batch_size, candidate_size)
-        assert candidate_recencies.shape == (batch_size, candidate_size)
-
-        candidate_batch = self.CandidateBatch(
-            ids=candidate_ids, ctr=candidate_ctr, recencies=candidate_recencies
-        )
-
-        # Then we get the clicked articles
-        # We only take the first most recent max_clicked articles
-        # If a user has clicked on less articles, we pad with 0
-
-        clicked_ids = []
-        clicked_ctr = []
-
-        for point in batch:
-            clicks_sorted_on_recency = sorted(
-                point.user_clicks, key=lambda article: article.clicktime, reverse=True
-            )
-
-            if len(clicks_sorted_on_recency) > self.max_clicked:
-                most_recent_clicks = clicks_sorted_on_recency[: self.max_clicked]
-                ids = np.array([article.article_id for article in most_recent_clicks])
-                ctr = torch.tensor(
-                    [article.ctr for article in most_recent_clicks], dtype=torch.float32
-                )
-
-            # If a user has clicked on less articles, we pad with 0
-            # The article id 0 does not exist, and for this special id the lookup news encoder
-            # will also return zeros for this article
-            elif len(clicks_sorted_on_recency) < self.max_clicked:
-                ids = np.array(
-                    [article.article_id for article in clicks_sorted_on_recency]
-                    + [0] * (self.max_clicked - len(clicks_sorted_on_recency))
-                )
-                ctr = torch.tensor(
-                    [article.ctr for article in clicks_sorted_on_recency]
-                    + [0.0] * (self.max_clicked - len(clicks_sorted_on_recency)),
-                    dtype=torch.float32,
-                )
-
-            elif len(clicks_sorted_on_recency) == self.max_clicked:
-                ids = np.array(
-                    [article.article_id for article in clicks_sorted_on_recency]
-                )
-                ctr = torch.tensor(
-                    [article.ctr for article in clicks_sorted_on_recency],
-                    dtype=torch.float32,
-                )
-
-            else:
-                raise ValueError("This should not happen")
-
-            clicked_ids.append(ids)
-            clicked_ctr.append(ctr)
-
-        clicked_ids = np.array(clicked_ids)
-        clicked_ctr = torch.stack(clicked_ctr)
-
-        clicks_batch = self.ClicksBatch(ids=clicked_ids, ctr=clicked_ctr)
-
-        return self.Inputs(candidates=candidate_batch, clicks=clicks_batch)
 
     @dataclass
     class CandidateBatch:
@@ -241,10 +145,18 @@ class PPRec(nn.Module):
         candidates: "PPRec.CandidateBatch"
         clicks: "PPRec.ClicksBatch"
 
+        def to_device(self, device: torch.device):
+            self.candidates.recencies = self.candidates.recencies.to(device)
+            self.candidates.ctr = self.candidates.ctr.to(device)
+            self.clicks.ctr = self.clicks.ctr.to(device)
+
     @dataclass
     class BatchPredictions:
         # tensor of shape (batch_size, candidate_size)
         # the final ranking scores for every article
+        # these scores aren't normalized or softmaxed.
+        # softmax over the second dimension to get a
+        # 'probability' distribution.
         score: torch.Tensor
 
         # tensor of shape (batch_size, candidate_size)
@@ -254,6 +166,25 @@ class PPRec(nn.Module):
         # tensor of shape (batch_size, candidate_size)
         # the popularity score for every article
         popularity_score: torch.Tensor
+
+        # tensor of shape (batch_size, candidate_size, size_n)
+        # the news embeddings for every article, outputted by the
+        # user news encoder
+        user_news_embeddings: torch.Tensor
+
+        # tensor of shape (batch_size, candidate_size, size_n)
+        # the news embeddings for every article, outputted by the
+        # popularity news encoder
+        popularity_news_embeddings: torch.Tensor
+
+        def to_device(self, device: torch.device):
+            self.score = self.score.to(device)
+            self.personalized_matching_score = self.personalized_matching_score.to(
+                device
+            )
+            self.popularity_score = self.popularity_score.to(device)
+            self.user_news_embeddings = self.user_news_embeddings.to(device)
+            self.popularity_news_embeddings = self.popularity_news_embeddings.to(device)
 
     def forward(
         self,
@@ -342,7 +273,7 @@ class PPRec(nn.Module):
         )  # (batch_size, size_u)
         assert len(user_embedding.shape) == 2
         assert user_embedding.shape[0] == batch_size
-        assert user_embedding.shape[1] == self.user_encoder.size_u
+        assert user_embedding.shape[1] == self.user_encoder.size_n
 
         # size u should be the same as size n, is already enforced I think but to be sure
         assert user_embedding.shape[1] == candidate_n_for_user_comparison.shape[2]
@@ -416,6 +347,8 @@ class PPRec(nn.Module):
             score=final_score,
             personalized_matching_score=personalized_matching_score,
             popularity_score=popularity_score,
+            user_news_embeddings=candidate_n_for_user_comparison,
+            popularity_news_embeddings=candidate_n_for_popularity,
         )
 
 
@@ -436,14 +369,14 @@ class PersonalizedAggregatorGate(nn.Module):
 
     """
 
-    def __init__(self, size_u: int, config: PAGConfig):
+    def __init__(self, size_n: int, config: PAGConfig):
         super().__init__()
 
         self.config = config
-        self.size_u = size_u
+        self.size_n = size_n
 
         self.dense = dense_from_hiddens_layers(
-            input_size=size_u,
+            input_size=size_n,
             output_size=1,
             config=config.dense_config,
         )
@@ -462,7 +395,7 @@ class PersonalizedAggregatorGate(nn.Module):
 
         assert len(u.shape) == 2
         batch_size, size_u = u.shape
-        assert size_u == self.size_u
+        assert size_u == self.size_n
 
         eta = torch.sigmoid(self.dense(u))  # shape (batch_size, 1)
         assert len(eta.shape) == 2

@@ -10,7 +10,13 @@ import pydantic
 from ..utils import get_data_folder
 
 
-DatasetSize = Literal["demo", "small", "large"]
+DatasetSize = Literal[
+    # The mini size used 10% of the demo data
+    "mini",
+    "demo",
+    "small",
+    "large",
+]
 DatasetSplit = Literal["train", "val"]
 
 
@@ -99,7 +105,7 @@ class EBNeRDSplit:
         data_folder = get_data_folder(data_folder)
 
         match size:
-            case "demo":
+            case "demo" | "mini":
                 dataset_folder = os.path.join(data_folder, "ebnerd_demo")
             case "small":
                 dataset_folder = os.path.join(data_folder, "ebnerd_small")
@@ -120,6 +126,10 @@ class EBNeRDSplit:
         self._articles = pd.read_parquet(articles_parquet_path)
         self._behaviors = pd.read_parquet(behaviors_parquet_path)
         self._history = pd.read_parquet(history_parquet_path)
+
+        # Added a mini size for testing purposes, using only 10% of the demo data
+        if size == "mini":
+            self._behaviors = self._behaviors.sample(frac=0.1)
 
         # In the articlestotal_inviews, total_pageviews and total_read_time are supposed
         # to be integers looking at the data, but they are floats in the parquet file.

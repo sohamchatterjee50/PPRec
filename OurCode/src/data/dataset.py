@@ -32,8 +32,8 @@ class ClickedArticle:
 @dataclass
 class TrainDataPoint:
     user_clicks: list[ClickedArticle]
-    good_article: CandidateArticle
-    bad_article: CandidateArticle
+    good_articles: list[CandidateArticle]
+    bad_articles: list[CandidateArticle]
 
 
 @dataclass
@@ -45,11 +45,12 @@ class EBNeRDTrainDataset(Dataset):
 
     def __init__(
         self,
-        size: DatasetSize = "demo",
-        data_folder: str | None = None,
+        split: EBNeRDSplit,
+        # this is what the authors used, doesnt really matter
+        # just to precent division by zero
         ctr_delta: float = 0.001,
     ):
-        self.split = EBNeRDSplit(split="train", size=size, data_folder=data_folder)
+        self.split = split
         self.ctr_delta = ctr_delta
 
     def __len__(self) -> int:
@@ -65,18 +66,22 @@ class EBNeRDTrainDataset(Dataset):
             for article_id in user_history.article_id_fixed
         ]
 
-        assert len(impression.article_ids_clicked) > 0
-        good_article_id = random.choice(impression.article_ids_clicked)
-        good_article = self.split.get_article(good_article_id)
+        # todo batch this
+        good_articles = [
+            self.split.get_article(article_id)
+            for article_id in impression.article_ids_clicked
+        ]
 
         article_ids_not_clicked = [
             article_id
             for article_id in impression.article_ids_inview
-            if article_id != good_article_id
+            if article_id not in impression.article_ids_clicked
         ]
-        assert len(article_ids_not_clicked) > 0
-        bad_article_id = random.choice(article_ids_not_clicked)
-        bad_article = self.split.get_article(bad_article_id)
+
+        # todo batch this
+        bad_articles = [
+            self.split.get_article(article_id) for article_id in article_ids_not_clicked
+        ]
 
         datapoint = TrainDataPoint(
             user_clicks=[
@@ -89,16 +94,22 @@ class EBNeRDTrainDataset(Dataset):
                     user_history_articles, user_history.impression_time_fixed
                 )
             ],
-            good_article=CandidateArticle(
-                article_id=good_article.article_id,
-                recency=self.recency(good_article, impression),
-                ctr=self.click_through_rate(good_article),
-            ),
-            bad_article=CandidateArticle(
-                article_id=bad_article.article_id,
-                recency=self.recency(bad_article, impression),
-                ctr=self.click_through_rate(bad_article),
-            ),
+            good_articles=[
+                CandidateArticle(
+                    article_id=good_article.article_id,
+                    recency=self.recency(good_article, impression),
+                    ctr=self.click_through_rate(good_article),
+                )
+                for good_article in good_articles
+            ],
+            bad_articles=[
+                CandidateArticle(
+                    article_id=bad_article.article_id,
+                    recency=self.recency(bad_article, impression),
+                    ctr=self.click_through_rate(bad_article),
+                )
+                for bad_article in bad_articles
+            ],
         )
 
         return datapoint
