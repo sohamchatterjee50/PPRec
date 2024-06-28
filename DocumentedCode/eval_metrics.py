@@ -33,18 +33,19 @@ word2vec_embedding = get_transformers_word_embeddings(transformer_model)
 
 saved_model = PPRec(hparams_pprec,word2vec_embedding)
 
-PATH = '/home/scur1575/RecSys/PP-Rec/OurCode/Checkpoints/User_Profiling/model_DEMO_User_Profiling_Log_Tensorboard__20240627_033837_0'
+""" Model checkpoint """
+PATH = '/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/runs/pprec_check20240628_214213/model_DEMO_User_Profiling_Log_Tensorboard__20240627_033837_0'
 saved_model.load_state_dict(torch.load(PATH,weights_only=True))
 saved_model.to(device)
 import pickle
 article_mapping_title, article_mapping_entity, articles_ctr, popularity_mapping = {},{},{},{}
-with open('/home/scur1575/RecSys/PP-Rec/OurCode/demo_processed/article_mapping_title_DEMO.pkl', 'rb') as handle:
+with open('/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/demo_processed/article_mapping_title_DEMO.pkl', 'rb') as handle:
     article_mapping_title = pickle.load(handle)
-with open('/home/scur1575/RecSys/PP-Rec/OurCode/demo_processed/article_mapping_entity_DEMO.pkl', 'rb') as handle:
+with open('/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/article_mapping_entity_DEMO.pkl', 'rb') as handle:
     article_mapping_entity = pickle.load(handle)
-with open('/home/scur1575/RecSys/PP-Rec/OurCode/demo_processed/articles_ctr_DEMO.pkl', 'rb') as handle:
+with open('/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/articles_ctr_DEMO.pkl', 'rb') as handle:
     articles_ctr = pickle.load(handle)
-with open('/home/scur1575/RecSys/PP-Rec/OurCode/demo_processed/popularity_mapping_DEMO.pkl', 'rb') as handle:
+with open('/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/popularity_mapping_DEMO.pkl', 'rb') as handle:
     popularity_mapping = pickle.load(handle)
 
 
@@ -60,7 +61,7 @@ COLUMNS = [
 ]
 
 
-df_validation =  pl.scan_parquet("/home/scur1575/RecSys/PP-Rec/OurCode/demo_processed/val_DEMO.parquet").collect()
+df_validation =  pl.scan_parquet("/Users/sohamchatterjee/Documents/UvA/RecSYS/Project/PP-Rec/DocumentedCode/demo_processed/val_DEMO.parquet").collect()
 
 
 
@@ -99,12 +100,7 @@ with torch.no_grad():
             vhist_title = torch.from_numpy(vhist_title)
             vhist_popularity = torch.from_numpy(vhist_popularity)
             vlabels = torch.from_numpy(vlabels)
-            user_profile = torch.cat(
-            (
-            torch.from_numpy(vinputs[-4]),
-            torch.from_numpy(vinputs[-3]),
-            torch.from_numpy(vinputs[-2]),
-            torch.from_numpy(vinputs[-1])),axis=1)
+            
             
             
             vtitle = vtitle.to(device)
@@ -117,7 +113,7 @@ with torch.no_grad():
             user_profile = user_profile.to(device)
             
 
-            outputs = saved_model(vtitle, ventities, vctr, vrecency , vhist_title, vhist_popularity, user_profile).cpu().detach().numpy()
+            outputs = saved_model(vtitle, ventities, vctr, vrecency , vhist_title, vhist_popularity).cpu().detach().numpy()
             predictions = np.concatenate([predictions,outputs],axis=0)
             
            
