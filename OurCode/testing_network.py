@@ -278,50 +278,50 @@ class PPREC(nn.Module):
         # print(candidate.shape,history.shape)
         candidate=candidate.reshape(batch*self.PN_ratio,-1)[:,:-2]    #B_PN  X  seq_len
         history=history.reshape(batch*self.max_history_size,-1)[:,:-2] #B_MH X seqlen
-        print(candidate.shape,history.shape)
+        # print(candidate.shape,history.shape)
         ctr_cand=candidate.reshape(batch*self.PN_ratio,-1)[:,-2].unsqueeze(1)  #B_PN X 1
         Recency_cand=candidate.reshape(batch*self.PN_ratio,-1)[:,-1].unsqueeze(1) #B_PN X 1
 
         ctr_hist=history.reshape(batch*self.max_history_size,-1)[:,-2].unsqueeze(1)  #B_MH X 1
         Recency_hist=history.reshape(batch*self.max_history_size,-1)[:,-1].unsqueeze(1) #B_MH X 1
 
-        print(ctr_cand.shape,Recency_cand.shape,ctr_hist.shape,Recency_hist.shape)
+        # print(ctr_cand.shape,Recency_cand.shape,ctr_hist.shape,Recency_hist.shape)
         
 
         embed_candidate= self.fc_shorten(self.tanh(self.embed(candidate))) #B_PN x seqlength X Feat 
         embed_history= self.fc_shorten(self.tanh(self.embed(history))) #B_MH x seqlength X Feat 
-        print(embed_candidate.shape,embed_history.shape)
+        # print(embed_candidate.shape,embed_history.shape)
 
         embed_cand_Rec=self.embed_Rec(Recency_cand.float()) #B_PN  X Feat_rec
         embed_hist_Rec=self.embed_Rec(Recency_hist.float()) #B_MH  X Feat_rec
 
         embed_cand_ctr=self.embed_ctr(ctr_cand.float()) #B_PN  X Feat_ctr
         embed_hist_ctr=self.embed_ctr(ctr_hist.float()) #B_MH  X Feat_ctr
-        print("emb",embed_cand_ctr.shape,embed_hist_ctr.shape)
+        # print("emb",embed_cand_ctr.shape,embed_hist_ctr.shape)
 
         news_embedding_candidate=self.tanh(self.News_encoder(self.tanh(embed_candidate))) #B_PN X Feat_News
         news_embedding_history=self.tanh(self.News_encoder(self.tanh(embed_history))) #B_MH X Feat_News
 
-        print("news",news_embedding_candidate.shape,news_embedding_history.shape)
+        # print("news",news_embedding_candidate.shape,news_embedding_history.shape)
 
         Pop_embedding_candidate=self.Pop_encoder(news_embedding_candidate,embed_cand_ctr,embed_cand_Rec) 
         Pop_embedding_history=self.Pop_encoder(news_embedding_history,embed_hist_ctr,embed_hist_Rec)
 
-        print("pop",Pop_embedding_candidate.shape,Pop_embedding_history.shape)
+        # print("pop",Pop_embedding_candidate.shape,Pop_embedding_history.shape)
 
         s_p=Pop_embedding_candidate
 
-        print("s_p",s_p.shape)
+        # print("s_p",s_p.shape)
         user_inp_POP=Pop_embedding_history.reshape(Pop_embedding_history.shape[0]//self.max_history_size,self.max_history_size,Pop_embedding_history.shape[1])
         user_inp_News=news_embedding_history.reshape(news_embedding_history.shape[0]//self.max_history_size,self.max_history_size,news_embedding_history.shape[1])
-        print("user_inp",user_inp_POP.shape,user_inp_News.shape)
+        # print("user_inp",user_inp_POP.shape,user_inp_News.shape)
         user_embedding=self.User_encoder(user_inp_POP,user_inp_News)
-        print("UserEMb",user_embedding.shape,news_embedding_candidate.reshape(batch,self.PN_ratio,-1).shape)
+        # print("UserEMb",user_embedding.shape,news_embedding_candidate.reshape(batch,self.PN_ratio,-1).shape)
         s_m=user_embedding.unsqueeze(1)*news_embedding_candidate.reshape(batch,self.PN_ratio,-1)
         s_p=s_p.reshape(batch,self.PN_ratio,-1)
-        print('S',s_m.shape,s_p.shape)
+        # print('S',s_m.shape,s_p.shape)
         logits=self.fc_last(torch.cat([s_m,s_p],2)).squeeze(2)
-        print("logits",logits.shape)
+        # print("logits",logits.shape)
 
 
         return logits,self.extra_fc(self.tanh(news_embedding_history))

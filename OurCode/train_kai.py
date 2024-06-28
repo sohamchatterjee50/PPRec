@@ -1,26 +1,28 @@
+from pathlib import Path
+PATH = Path("~/ebnerd_data")
+DATASPLIT = "ebnerd_demo" #ebnerd_small
+testsplit="val_DEMO.parquet" #val_SMALL.parquet
+
+
 print("Adding path")
 from transformers import AutoTokenizer, AutoModel
 import transformers
-from pathlib import Path
+
 from transformers import BertModel
 
 # import tensorflow as tf
 import polars as pl
 import math
-#ADD THIS TO THE PATH
-print("Adding path")
+
 import os 
 import os
 cwd = os.getcwd()
-print(cwd)
+# print(cwd)
 from testing_network import *
 from ebrec.evaluation import MetricEvaluator, AucScore, NdcgScore, MrrScore
 
 bert_model = BertModel.from_pretrained('xlm-roberta-base').cuda()
 bert_model.eval()
-# sys.path.insert(0, '/home/apatra/Rec/contest/PPRec/OurCode/src/Ad_kai/ebnerd-benchmark/examples/00_quick_start')
-
-# print("lets go")
 
 
 from ebrec.utils._constants import (
@@ -80,8 +82,8 @@ def ebnerd_from_path(path: Path, history_size: int = 30) -> pl.DataFrame:
     return df_behaviors
 
 
-PATH = Path("~/ebnerd_data")
-DATASPLIT = "ebnerd_demo"
+
+
 COLUMNS = [
     DEFAULT_USER_COL,
     DEFAULT_HISTORY_ARTICLE_ID_COL,
@@ -112,7 +114,7 @@ df_train = (
 #     .pipe(create_binary_labels_column)
 #     .sample(fraction=FRACTION)
 # )
-df_validation=pl.read_parquet(PATH.joinpath("val_DEMO.parquet"))
+df_validation=pl.read_parquet(PATH.joinpath(testsplit))
 df_articles = pl.read_parquet(PATH.joinpath("articles.parquet"))
 
 
@@ -121,14 +123,7 @@ df_articles=df_articles.with_columns((pl.col('total_pageviews') / pl.col('total_
 
 df_articles=df_articles.with_columns((pl.col('total_pageviews') / pl.col('total_inviews') * 100).fill_null(0).alias('Recency'))
 
-# print(df_articles.select(['article_id', 'total_pageviews','total_inviews', 'CTR']))
-# kai_behav=pl.read_parquet(PATH.joinpath("ebnerd_small/train/history.parquet"))
-# print(kai_behav.head(2))
-# kai_behav=ebnerd_from_path(PATH.joinpath(DATASPLIT, "train"), history_size=HISTORY_SIZE)
-# # print(kai_behav.head(2))
-# for col in df_articles.columns:
-#     print(col)
-# print(df_articles.head())
+
 
 
 #MODEL KAI
@@ -142,15 +137,14 @@ transformer_tokenizer = AutoTokenizer.from_pretrained(TRANSFORMER_MODEL_NAME)
 
 # We'll init the word embeddings using the
 word2vec_embedding = get_transformers_word_embeddings(transformer_model)
-# print("help",word2vec_embedding)
+
 #
 df_articles, cat_cal = concat_str_columns(df_articles, columns=TEXT_COLUMNS_TO_USE)
-# print("Hurricane",df_articles.head())
+
 df_articles, token_col_title = convert_text2encoding_with_transformers(
     df_articles, transformer_tokenizer, cat_cal, max_length=MAX_TITLE_LENGTH
 )
 # =>
-print("Hurricane2",token_col_title)
 
 article_mapping = create_article_id_to_value_mapping(
     df=df_articles, value_col=token_col_title
@@ -167,7 +161,7 @@ for i in article_mapping.keys():
 
 
 
-print("hurricane 3",word2vec_embedding.shape)
+
 
 
 
@@ -211,12 +205,12 @@ optimizer=torch.optim.SGD([
 for i in range(1):
     total_loss=0
     for x,y in train_dataloader:
-        # print(x[0].shape,x[1].shape,y.shape)
+
         logits,pred_extra=model(torch.tensor(x[1]).long().cuda(),torch.tensor(x[0]).long().cuda())
         a,b,c=x[0].shape[0],x[0].shape[1],x[0].shape[2]
-        print("Hell1",a,b,c)
+
         vvv=bert_model(torch.tensor(x[0]).reshape(a*b,c).long().cuda())
-        print("HELL",vvv.pooler_output.shape,pred_extra.shape)
+
         extra=vvv.pooler_output
         loss=criterion(logits,torch.argmax(torch.tensor(y),1).cuda())+0.001*((extra-vvv.pooler_output)**2).mean()
         optimizer.zero_grad()
@@ -224,7 +218,7 @@ for i in range(1):
         optimizer.step()
         total_loss=total_loss+loss
         # break
-    print(print("EPOCH",i,total_loss))
+    print("EPOCH",i,total_loss)
 
 labels=[]
 pred=[]
@@ -239,7 +233,7 @@ for x,y in val_dataloader:
         a0=x[0][z*73:(z+1)*73,:,:]
         a1=x[1][z*73:(z+1)*73,:,:]
 
-        print(a0.shape,a1.shape)
+
         scores,_=model(torch.tensor(a1).long().cuda(),torch.tensor(a0).long().cuda())
         # scores=torch.zeros(x[0].shape[0],1)
         pred.append(scores.detach().cpu())
@@ -247,12 +241,12 @@ for x,y in val_dataloader:
 
 # labels=torch.cat(labels,0)
 pred_validation=torch.cat(pred,0).squeeze()
-print("hola",pred_validation.shape)
+
 
 df_validation = add_prediction_scores(df_validation, pred_validation.tolist()).pipe(
     add_known_user_column, known_users=df_train[DEFAULT_USER_COL]
 )
-print(df_validation.head(2))
+
 
 metrics = MetricEvaluator(
     labels=df_validation["labels"].to_list(),
