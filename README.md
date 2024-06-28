@@ -19,7 +19,7 @@ For preprocessing documentation and other details, run the notebook DocumentedCo
 
 For ablation studies,
 1. To remove Time-aware News Popularity Predictor, comment out the corresponding module from PPRec class.
-2. To remove rececny or CTR, comment out the corresponding features inside Time-aware News Popularity Predictor class.
+2. To remove recency or CTR, comment out the corresponding features inside Time-aware News Popularity Predictor class.
 3. To combine NER, topics and category info, preprocess the dataset and take the mean embedding inside KnowledgeAwareNewsEncoder module.
 
 Extensions:
