@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
+from .utils import DenseConfig, dense_from_hiddens_layers
+
 
 @dataclass
 class TANPPConfig:
@@ -181,7 +183,7 @@ class RecencyEmbedding(nn.Module):
 
 @dataclass
 class RBPDConfig:
-    hidden_layers: list[int]
+    dense_config: DenseConfig
 
 
 class RecencyBasedPopularityDense(nn.Module):
@@ -202,7 +204,11 @@ class RecencyBasedPopularityDense(nn.Module):
 
         self.config = config
         self.r_size = r_size
-        self.dense = nn.Linear(r_size, 1)
+        self.dense = dense_from_hiddens_layers(
+            input_size=r_size,
+            output_size=1,
+            config=config.dense_config,
+        )
 
     def forward(self, r: torch.Tensor) -> torch.Tensor:
         r"""
@@ -233,7 +239,7 @@ class RecencyBasedPopularityDense(nn.Module):
 
 @dataclass
 class CBPDConfig:
-    hidden_layers: list[int]
+    dense_config: DenseConfig
 
 
 class ContentBasedPopularityDense(nn.Module):
@@ -255,7 +261,11 @@ class ContentBasedPopularityDense(nn.Module):
         self.config = config
         self.n_size = n_size
 
-        self.dense = nn.Linear(n_size, 1)
+        self.dense = dense_from_hiddens_layers(
+            input_size=n_size,
+            output_size=1,
+            config=config.dense_config,
+        )
 
     def forward(self, n: torch.Tensor) -> torch.Tensor:
         r"""
@@ -286,7 +296,7 @@ class ContentBasedPopularityDense(nn.Module):
 
 @dataclass
 class CRGConfig:
-    hidden_layers: list[int]
+    dense_config: DenseConfig
 
 
 class ContentRecencyGate(nn.Module):
@@ -314,9 +324,11 @@ class ContentRecencyGate(nn.Module):
         self.r_size = r_size
         self.n_size = n_size
 
-        # assumption: Wp is a vector, and bp is a scalar, check class docstring
-        self.Wp = nn.Parameter(torch.rand(r_size + n_size))
-        self.bp = nn.Parameter(torch.rand(1))
+        self.dense = dense_from_hiddens_layers(
+            input_size=r_size + n_size,
+            output_size=1,
+            config=config.dense_config,
+        )
 
     def forward(self, r: torch.Tensor, n: torch.Tensor) -> torch.Tensor:
         r"""
@@ -342,11 +354,14 @@ class ContentRecencyGate(nn.Module):
         rn = torch.cat([r, n], dim=1)  # (batch_size, r_size + n_size)
         assert rn.size(1) == self.r_size + self.n_size
 
-        Wp_rn = torch.matmul(rn, self.Wp)  # (batch_size)
-        assert len(Wp_rn.size()) == 1
+        Wp_rn_bp = self.dense(rn)  # (batch_size, 1)
+        assert len(Wp_rn_bp.size()) == 2
+        assert Wp_rn_bp.size(0) == r.size(0)
+        assert Wp_rn_bp.size(1) == 1
 
-        Wp_rn_bp = Wp_rn + self.bp  # (batch_size)
+        Wp_rn_bp = Wp_rn_bp.squeeze()  # (batch_size)
         assert len(Wp_rn_bp.size()) == 1
+        assert Wp_rn_bp.size(0) == r.size(0)
 
         theta = torch.sigmoid(Wp_rn_bp)
 
