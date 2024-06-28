@@ -161,7 +161,7 @@ class NewsEncoder(nn.Module):
 class NewsEnc_config:
     input_dim=300
     embed_dim=300
-    num_heads=3
+    num_heads=20
 
 # config1=NewsEnc_config
 # ob=NewsEncoder(config1)
@@ -187,8 +187,8 @@ class TimeAwarePopularity(nn.Module):
 
         
         Gate=self.sigmoid(self.gate(torch.cat([content_embedding,Recency_Embedding],1)))
-        p_hat_R=self.fc_R(Recency_Embedding)
-        p_hat_C=self.fc_C(content_embedding)
+        p_hat_R=self.fc_R(self.tanh(Recency_Embedding))
+        p_hat_C=self.fc_C(self.tanh(content_embedding))
         p_hat=(Gate*p_hat_C)+(1-Gate)*p_hat_R
         s_p=self.wc(self.tanh(Ctr_Embedding))+self.wp(self.tanh(p_hat))
 
@@ -198,8 +198,8 @@ class TimeAwarePopularity(nn.Module):
 class Popularity_config:
     input_dim=300
     embed_dim=300
-    num_heads=3
-    inter=150
+    num_heads=20
+    inter=600
     ctr_emb=300
     recency_emb=300
     feature_dim=300
@@ -227,7 +227,7 @@ class UserEncoder(nn.Module):
 
     def forward(self, Popular_embedding,News_Embedding): #B x history X Feat  B x history X Feat
 
-        Attend_News=self.ATTN(News_Embedding)
+        Attend_News=self.ATTN(self.tanh(News_Embedding))
         alpha_i=F.softmax(self.alpha_linear(self.tanh(self.wu(torch.cat([Attend_News,Popular_embedding],2)))).squeeze(2),1) # B X History
         user_embedding=News_Embedding*alpha_i.unsqueeze(2)
         user_embedding=user_embedding.sum(1)
@@ -236,9 +236,9 @@ class UserEncoder(nn.Module):
 class Userenc_config:
     input_dim=300
     embed_dim=300
-    num_heads=3
+    num_heads=20
     popularity_feat_dim=300
-    inter=150
+    inter=600
 
 
 # config3=Userenc_config()
@@ -270,6 +270,7 @@ class PPREC(nn.Module):
         self.fc_last=nn.Linear(UserENC_config.embed_dim+Popular_Config.feature_dim,1)
         self.fc_shorten=nn.Linear(word2vec.shape[1],General_Config.word_emb_dim)
         self.tanh=nn.Tanh()
+        self.extra_fc=nn.Linear(300,768)
 
         
     def forward(self,candidate,history ): #B x PN_ratio X seqlength   B x history X seqlength
@@ -298,8 +299,8 @@ class PPREC(nn.Module):
         embed_hist_ctr=self.embed_ctr(ctr_hist.float()) #B_MH  X Feat_ctr
         print("emb",embed_cand_ctr.shape,embed_hist_ctr.shape)
 
-        news_embedding_candidate=self.News_encoder(embed_candidate) #B_PN X Feat_News
-        news_embedding_history=self.News_encoder(embed_history) #B_MH X Feat_News
+        news_embedding_candidate=self.tanh(self.News_encoder(self.tanh(embed_candidate))) #B_PN X Feat_News
+        news_embedding_history=self.tanh(self.News_encoder(self.tanh(embed_history))) #B_MH X Feat_News
 
         print("news",news_embedding_candidate.shape,news_embedding_history.shape)
 
@@ -323,7 +324,7 @@ class PPREC(nn.Module):
         print("logits",logits.shape)
 
 
-        return logits
+        return logits,self.extra_fc(self.tanh(news_embedding_history))
 
 
 class General_Config:

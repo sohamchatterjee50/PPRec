@@ -1,6 +1,9 @@
 print("Adding path")
 from transformers import AutoTokenizer, AutoModel
+import transformers
 from pathlib import Path
+from transformers import BertModel
+
 # import tensorflow as tf
 import polars as pl
 import math
@@ -12,6 +15,9 @@ cwd = os.getcwd()
 print(cwd)
 from testing_network import *
 from ebrec.evaluation import MetricEvaluator, AucScore, NdcgScore, MrrScore
+
+bert_model = BertModel.from_pretrained('xlm-roberta-base').cuda()
+bert_model.eval()
 # sys.path.insert(0, '/home/apatra/Rec/contest/PPRec/OurCode/src/Ad_kai/ebnerd-benchmark/examples/00_quick_start')
 
 # print("lets go")
@@ -75,7 +81,7 @@ def ebnerd_from_path(path: Path, history_size: int = 30) -> pl.DataFrame:
 
 
 PATH = Path("~/ebnerd_data")
-DATASPLIT = "ebnerd_small"
+DATASPLIT = "ebnerd_demo"
 COLUMNS = [
     DEFAULT_USER_COL,
     DEFAULT_HISTORY_ARTICLE_ID_COL,
@@ -84,7 +90,7 @@ COLUMNS = [
     DEFAULT_IMPRESSION_ID_COL,
 ]
 HISTORY_SIZE = 10
-FRACTION = 0.01
+FRACTION = 1#0.01
 
 df_train = (
     ebnerd_from_path(PATH.joinpath(DATASPLIT, "train"), history_size=HISTORY_SIZE)
@@ -100,12 +106,13 @@ df_train = (
     .sample(fraction=FRACTION)
 )
 # =>
-df_validation = (
-    ebnerd_from_path(PATH.joinpath(DATASPLIT, "validation"), history_size=HISTORY_SIZE)
-    .select(COLUMNS)
-    .pipe(create_binary_labels_column)
-    .sample(fraction=FRACTION)
-)
+# df_validation = (
+#     ebnerd_from_path(PATH.joinpath(DATASPLIT, "validation"), history_size=HISTORY_SIZE)
+#     .select(COLUMNS)
+#     .pipe(create_binary_labels_column)
+#     .sample(fraction=FRACTION)
+# )
+df_validation=pl.read_parquet(PATH.joinpath("val_DEMO.parquet"))
 df_articles = pl.read_parquet(PATH.joinpath("articles.parquet"))
 
 
@@ -127,7 +134,7 @@ df_articles=df_articles.with_columns((pl.col('total_pageviews') / pl.col('total_
 #MODEL KAI
 TRANSFORMER_MODEL_NAME = "FacebookAI/xlm-roberta-base"
 TEXT_COLUMNS_TO_USE = [DEFAULT_SUBTITLE_COL, DEFAULT_TITLE_COL]
-MAX_TITLE_LENGTH = 30
+MAX_TITLE_LENGTH = 32
 
 # LOAD HUGGINGFACE:
 transformer_model = AutoModel.from_pretrained(TRANSFORMER_MODEL_NAME)
@@ -200,15 +207,24 @@ optimizer=torch.optim.SGD([
                 {'params': model.parameters(), 'lr': 1e-2},
             ], lr=1e-3, momentum=0.9)
 
-for i in range(50):
+
+for i in range(1):
+    total_loss=0
     for x,y in train_dataloader:
         # print(x[0].shape,x[1].shape,y.shape)
-        logits=model(torch.tensor(x[1]).long().cuda(),torch.tensor(x[0]).long().cuda())
-        loss=criterion(logits,torch.argmax(torch.tensor(y),1).cuda())
+        logits,pred_extra=model(torch.tensor(x[1]).long().cuda(),torch.tensor(x[0]).long().cuda())
+        a,b,c=x[0].shape[0],x[0].shape[1],x[0].shape[2]
+        print("Hell1",a,b,c)
+        vvv=bert_model(torch.tensor(x[0]).reshape(a*b,c).long().cuda())
+        print("HELL",vvv.pooler_output.shape,pred_extra.shape)
+        extra=vvv.pooler_output
+        loss=criterion(logits,torch.argmax(torch.tensor(y),1).cuda())+0.001*((extra-vvv.pooler_output)**2).mean()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        break
+        total_loss=total_loss+loss
+        # break
+    print(print("EPOCH",i,total_loss))
 
 labels=[]
 pred=[]
@@ -224,7 +240,7 @@ for x,y in val_dataloader:
         a1=x[1][z*73:(z+1)*73,:,:]
 
         print(a0.shape,a1.shape)
-        scores=model(torch.tensor(a1).long().cuda(),torch.tensor(a0).long().cuda())
+        scores,_=model(torch.tensor(a1).long().cuda(),torch.tensor(a0).long().cuda())
         # scores=torch.zeros(x[0].shape[0],1)
         pred.append(scores.detach().cpu())
     # break
