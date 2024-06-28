@@ -5,8 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from ebrec.utils._articles_behaviors import map_list_article_id_to_value
 from ebrec.utils._python import (
-    repeat_by_list_values_from_matrix,
-    create_lookup_objects,
+    repeat_by_list_values_from_matrix
 )
 
 from ebrec.utils._constants import (
@@ -14,6 +13,81 @@ from ebrec.utils._constants import (
     DEFAULT_LABELS_COL,
     DEFAULT_USER_COL,
 )
+
+def create_lookup_objects(
+    lookup_dictionary: dict[int, np.array], unknown_representation: str,is_array=True) -> tuple[dict[int, pl.Series], np.array]:
+    """Creates lookup objects for efficient data retrieval.
+
+    This function generates a dictionary of indexes and a matrix from the given lookup dictionary.
+    The generated lookup matrix has an additional row based on the specified unknown representation
+    which could be either zeros or the mean of the values in the lookup dictionary.
+
+    Args:
+        lookup_dictionary (dict[int, np.array]): A dictionary where keys are unique identifiers (int)
+            and values are some representations which can be any data type, commonly used for lookup operations.
+        unknown_representation (str): Specifies the method to represent unknown entries.
+            It can be either 'zeros' to represent unknowns with a row of zeros, or 'mean' to represent
+            unknowns with a row of mean values computed from the lookup dictionary.
+
+    Raises:
+        ValueError: If the unknown_representation is not either 'zeros' or 'mean',
+            a ValueError will be raised.
+
+    Returns:
+        tuple[dict[int, pl.Series], np.array]: A tuple containing two items:
+            - A dictionary with the same keys as the lookup_dictionary where values are polars Series
+                objects containing a single value, which is the index of the key in the lookup dictionary.
+            - A numpy array where the rows correspond to the values in the lookup_dictionary and an
+                additional row representing unknown entries as specified by the unknown_representation argument.
+
+    Example:
+    >>> data = {
+            10: np.array([0.1, 0.2, 0.3]),
+            20: np.array([0.4, 0.5, 0.6]),
+            30: np.array([0.7, 0.8, 0.9]),
+        }
+    >>> lookup_dict, lookup_matrix = create_lookup_objects(data, "zeros")
+
+    >>> lookup_dict
+        {10: shape: (1,)
+            Series: '' [i64]
+            [
+                    1
+            ], 20: shape: (1,)
+            Series: '' [i64]
+            [
+                    2
+            ], 30: shape: (1,)
+            Series: '' [i64]
+            [
+                    3
+        ]}
+    >>> lookup_matrix
+        array([[0. , 0. , 0. ],
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9]])
+    """
+    # MAKE LOOKUP DICTIONARY
+    lookup_indexes = {
+        id: pl.Series("", [i]) for i, id in enumerate(lookup_dictionary, start=1)
+    }
+    # MAKE LOOKUP MATRIX
+    lookup_matrix = np.array(list(lookup_dictionary.values()))
+    if is_array:
+        if unknown_representation == "zeros":
+            UNKNOWN_ARRAY = np.zeros(lookup_matrix.shape[1], dtype=lookup_matrix.dtype)
+        elif unknown_representation == "mean":
+            UNKNOWN_ARRAY = np.mean(lookup_matrix, axis=0, dtype=lookup_matrix.dtype)
+        else:
+            raise ValueError(
+                f"'{unknown_representation}' is not a specified method. Can be either 'zeros' or 'mean'."
+            )
+
+        lookup_matrix = np.vstack([UNKNOWN_ARRAY, lookup_matrix])
+    return lookup_indexes, lookup_matrix
+
+
 
 
 @dataclass
@@ -73,6 +147,7 @@ class NewsrecDataLoader(Dataset):
 
 @dataclass(kw_only=True)
 class PPRecDataLoader(NewsrecDataLoader):
+    """ PPRec DataLoader which inherits from the NewsrecDataLoader"""
     entity_mapping: dict[int, list[int]] = None
     ctr_mapping: dict[int, int] = None
     popularity_mapping: dict[int, int] = None
@@ -105,8 +180,6 @@ class PPRecDataLoader(NewsrecDataLoader):
         ) = create_lookup_objects(
             self.popularity_mapping, unknown_representation=self.unknown_representation,is_array=False
         )
-        
-        
 
         return super().__post_init__()
 
@@ -175,8 +248,6 @@ class PPRecDataLoader(NewsrecDataLoader):
             .with_columns(ctr.select(pl.all().name.prefix(self.ctr_prefix)))
             .with_columns(popularity.select(pl.all().name.prefix(self.pop_prefix)))
             )
-        
-        
       
         return transformed_df
 
@@ -187,7 +258,10 @@ class PPRecDataLoader(NewsrecDataLoader):
         
         batch_y = self.y[idx * self.batch_size : (idx + 1) * self.batch_size]
         
+
         if self.eval_mode:
+            """ Evaluation mode """
+
             batch_y = np.array(batch_y.to_list())
             
             his_input_title = np.array(
@@ -206,8 +280,6 @@ class PPRecDataLoader(NewsrecDataLoader):
                 batch_X[self.pop_prefix + self.history_column].to_list()
             )
 
-            
-            
             pred_input_title = np.array(
                 batch_X[self.title_prefix + self.inview_col].to_list()
             )
@@ -225,7 +297,6 @@ class PPRecDataLoader(NewsrecDataLoader):
                 batch_X[self.pop_prefix + self.inview_col].to_list()
             )
             
-            
             pred_input_title = np.squeeze(
                 self.lookup_article_matrix[pred_input_title], axis=2
             )
@@ -233,12 +304,6 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_entity = np.squeeze(
                 self.lookup_article_matrix_entity[pred_input_entity], axis=2
             )
-            
-            
-            
-            
-            
-           
             
             his_input_title = np.squeeze(
                 self.lookup_article_matrix[his_input_title], axis=2
@@ -255,6 +320,8 @@ class PPRecDataLoader(NewsrecDataLoader):
             
 
         else:
+
+            """ Train mode """
             
             batch_y = np.array(batch_y.to_list())
             
@@ -273,8 +340,6 @@ class PPRecDataLoader(NewsrecDataLoader):
             his_input_pop = np.array(
                 batch_X[self.pop_prefix + self.history_column].to_list()
             )
-
-            
             
             pred_input_title = np.array(
                 batch_X[self.title_prefix + self.inview_col].to_list()
@@ -293,7 +358,6 @@ class PPRecDataLoader(NewsrecDataLoader):
                 batch_X[self.pop_prefix + self.inview_col].to_list()
             )
             
-            
             pred_input_title = np.squeeze(
                 self.lookup_article_matrix[pred_input_title], axis=2
             )
@@ -301,13 +365,7 @@ class PPRecDataLoader(NewsrecDataLoader):
             pred_input_entity = np.squeeze(
                 self.lookup_article_matrix_entity[pred_input_entity], axis=2
             )
-            
-            
-            
-            
-            
-           
-            
+             
             his_input_title = np.squeeze(
                 self.lookup_article_matrix[his_input_title], axis=2
                 )

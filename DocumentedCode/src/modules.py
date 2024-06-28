@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 
-
+"""  Knowledge Aware News Encoder which uses self attention and cross attention modules    """
 class KnowledgeAwareNewsEncoder(nn.Module):
     def __init__(self,hparams,
         word2vec_embedding=None,
@@ -34,16 +34,17 @@ class KnowledgeAwareNewsEncoder(nn.Module):
         word_embeddings = torch.reshape(word_embeddings,(word_embeddings.shape[0],word_embeddings.shape[1]*word_embeddings.shape[2],word_embeddings.shape[3]))
         entity_embeddings = torch.reshape(entity_embeddings,(entity_embeddings.shape[0],entity_embeddings.shape[1]*entity_embeddings.shape[2],entity_embeddings.shape[3]))
         
+        """ Word level self attention """
         word_self_attn_output,_ = self.word_self_attention(word_embeddings, word_embeddings, word_embeddings)
         
+        """ Entity(in this case NER clusters) level self attention """
         entity_self_attn_output,_ = self.entity_self_attention(entity_embeddings, entity_embeddings, entity_embeddings)
         
-
+        """ Cross attention between words and entities   """
         word_cross_output,_ = self.word_cross_attention(word_embeddings,entity_embeddings,entity_embeddings)
         entity_cross_output,_ = self.word_cross_attention(entity_embeddings, word_embeddings, word_embeddings)
         
 
-        
         word_output = torch.add(word_self_attn_output,word_cross_output)
         entity_output = torch.add(entity_self_attn_output,entity_cross_output)
         news_encoder,_ = self.final_attention_layer(word_output, entity_output, entity_output)
@@ -199,6 +200,8 @@ class ContentPopularityJointAttention(nn.Module):
         assert u.size(1) == self.m_size
 
         return u
+    
+
 class PopularityAwareUserEncoder(nn.Module):
     def __init__(self,
                  hparams,
@@ -369,4 +372,4 @@ def train_one_epoch(epoch_index, tb_writer, train_dataloader,optimizer,model,los
         tb_x = epoch_index * len(train_dataloader) + i + 1
         tb_writer.add_scalar('Loss/train', running_loss, tb_x)
 
-    return last_loss       
+    return running_loss, i+1       
